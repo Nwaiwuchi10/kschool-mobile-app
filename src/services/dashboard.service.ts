@@ -45,6 +45,16 @@ export interface StudentDashboardData {
   recentQuizResults: StudentQuizResult[];
 }
 
+export interface AnnouncementItem {
+  _id: string;
+  title: string;
+  content: string;
+  audience?: string;
+  authorName?: string;
+  pinned?: boolean;
+  createdAt: string;
+}
+
 export const studentDashboardService = {
   async getDashboardData(classLevel?: string, userId?: string): Promise<StudentDashboardData> {
     const params: Record<string, string> = {};
@@ -55,6 +65,11 @@ export const studentDashboardService = {
       params.userId = userId.trim();
     }
     const response = await api.get<StudentDashboardData>('/dashboard/student', { params });
+    return response.data;
+  },
+
+  async getAnnouncements(): Promise<AnnouncementItem[]> {
+    const response = await api.get<AnnouncementItem[]>('/dashboard/announcements');
     return response.data;
   },
 };
