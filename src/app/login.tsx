@@ -71,9 +71,17 @@ export default function LoginScreen() {
         );
       }
     } catch (err: any) {
-      const msg = err.message || 'Invalid email or password. Please try again.';
+      console.warn('[LOGIN ERROR]', err);
+      const backendMessage =
+        err?.response?.data?.message ||
+        (Array.isArray(err?.response?.data?.message) ? err.response.data.message.join(', ') : null) ||
+        err?.message ||
+        'Invalid email or password. Please verify your credentials.';
+
+      const msg = typeof backendMessage === 'string' ? backendMessage : 'Invalid email or password. Please check your credentials and try again.';
       setErrorMessage(msg);
-      showError('Login Failed', msg);
+      // timeoutMs: 0 ensures the error dialog remains visible until the user taps 'Try Again' or closes it
+      showError('Login Failed', msg, undefined, 'Try Again', 0);
     } finally {
       setIsLoading(false);
     }
