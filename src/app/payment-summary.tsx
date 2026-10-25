@@ -222,17 +222,28 @@ export default function PaymentSummaryScreen() {
           </View>
 
           {checkoutUrl && (
-            <WebView
-              source={{ uri: checkoutUrl }}
-              onNavigationStateChange={handleWebViewNavigationStateChange}
-              startInLoadingState={true}
-              renderLoading={() => (
-                <View style={styles.webViewLoader}>
-                  <ActivityIndicator size="large" color="#127A71" />
-                  <Text style={styles.webViewLoaderText}>Connecting to Monnify gateway...</Text>
-                </View>
-              )}
-            />
+            <View style={{ flex: 1 }}>
+              <WebView
+                source={{ uri: checkoutUrl }}
+                style={{ flex: 1 }}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+                scalesPageToFit={true}
+                originWhitelist={['*']}
+                onNavigationStateChange={handleWebViewNavigationStateChange}
+                startInLoadingState={true}
+                onError={(syntheticEvent) => {
+                  const { nativeEvent } = syntheticEvent;
+                  console.warn('WebView error:', nativeEvent);
+                }}
+                renderLoading={() => (
+                  <View style={styles.webViewLoader}>
+                    <ActivityIndicator size="large" color="#127A71" />
+                    <Text style={styles.webViewLoaderText}>Connecting to Monnify gateway...</Text>
+                  </View>
+                )}
+              />
+            </View>
           )}
         </SafeAreaView>
       </Modal>
