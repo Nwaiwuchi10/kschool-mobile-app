@@ -1,10 +1,16 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/hooks/useAppTheme';
 
 export default function TabLayout() {
   const { colors } = useAppTheme();
+  const insets = useSafeAreaInsets();
+
+  // Dynamic bottom padding: ensure system gesture / 3-button navigation bar never collides
+  const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 14 : 10);
+  const barHeight = 60 + bottomPadding;
 
   return (
     <Tabs
@@ -17,6 +23,8 @@ export default function TabLayout() {
           {
             backgroundColor: colors.tabBarBg,
             borderTopColor: colors.tabBarBorder,
+            height: barHeight,
+            paddingBottom: bottomPadding,
           },
         ],
         tabBarLabelStyle: styles.tabBarLabel,
