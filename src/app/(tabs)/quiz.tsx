@@ -17,7 +17,8 @@ import { subscriptionService } from '@/services/subscription.service';
 import { MathView } from '@/components/MathView';
 import { useAppTheme } from '@/hooks/useAppTheme';
 
-const QUESTION_TIME_LIMIT = 10;
+// Default allocated time per question (e.g. 60 seconds per question for thoughtful reading)
+const QUESTION_TIME_LIMIT = 60;
 
 export default function QuizScreen() {
   const { colors, isDark } = useAppTheme();
@@ -29,7 +30,7 @@ export default function QuizScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 10-Second Countdown timer
+  // Digital countdown timer showing MM:SS
   const [timeLeft, setTimeLeft] = useState(QUESTION_TIME_LIMIT);
   const timerRef = useRef<any>(null);
 
@@ -218,9 +219,17 @@ export default function QuizScreen() {
     }
   };
 
-  // Timer color indicator
-  const timerColor = timeLeft <= 3 ? colors.danger : timeLeft <= 6 ? colors.warning : colors.primary;
-  const timerPercent = (timeLeft / QUESTION_TIME_LIMIT) * 100;
+  // Format seconds into MM:SS display
+  const formatTimer = (totalSecs: number) => {
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Timer color indicator: red when < 10s, amber when < 20s, primary otherwise
+  const isUrgent = timeLeft <= 10;
+  const isWarning = timeLeft <= 20;
+  const timerColor = isUrgent ? colors.danger : isWarning ? colors.warning : colors.primary;
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -232,16 +241,26 @@ export default function QuizScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.headerTag, { color: colors.primary }]}>TIMED ASSESSMENT</Text>
+          <Text style={[styles.headerTag, { color: colors.primary }]}>EXERCISE ASSESSMENT</Text>
           <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
             {currentQuiz?.title || params.title || 'Topic Quiz'}
           </Text>
         </View>
 
-        {/* 10-Second Timer Badge */}
-        <View style={[styles.timerBadge, { borderColor: timerColor, backgroundColor: colors.surface }]}>
-          <Ionicons name="time-outline" size={16} color={timerColor} />
-          <Text style={[styles.timerText, { color: timerColor }]}>{timeLeft}s</Text>
+        {/* Digital Clock Badge */}
+        <View
+          style={[
+            styles.timerBadge,
+            {
+              borderColor: timerColor,
+              backgroundColor: isUrgent ? '#FEE2E2' : colors.surfaceAlt,
+            },
+          ]}
+        >
+          <Ionicons name="time" size={17} color={timerColor} />
+          <Text style={[styles.timerText, { color: timerColor }]}>
+            {formatTimer(timeLeft)}
+          </Text>
         </View>
       </View>
 
@@ -252,16 +271,6 @@ export default function QuizScreen() {
             <Text style={[styles.loadingBannerText, { color: colors.primary }]}>Loading quiz questions...</Text>
           </View>
         )}
-
-        {/* Timer Bar */}
-        <View style={[styles.timerBarBg, { backgroundColor: colors.surfaceAlt }]}>
-          <View
-            style={[
-              styles.timerBarFill,
-              { width: `${timerPercent}%`, backgroundColor: timerColor },
-            ]}
-          />
-        </View>
 
         {/* Questions Area */}
         {!currentQ ? (
@@ -420,27 +429,17 @@ const styles = StyleSheet.create({
   timerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 20,
     borderWidth: 1.5,
-    backgroundColor: '#FFFFFF',
   },
   timerText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
-  },
-  timerBarBg: {
-    height: 4,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 2,
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-  timerBarFill: {
-    height: 4,
-    borderRadius: 2,
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 0.5,
   },
   container: {
     paddingHorizontal: 24,
