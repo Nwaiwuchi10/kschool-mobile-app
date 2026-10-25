@@ -41,3 +41,7 @@ example
 # generated native folders
 /ios
 /android
+
+# Builds & Local secrets
+*.apk
+.env

@@ -1,16 +1,20 @@
 {
   "expo": {
-    "name": "school-mobile-app",
+    "name": "KSCHOOLMATE",
     "slug": "school-mobile-app",
+    "owner": "chrisschool",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "schoolmobileapp",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.odyseyy.schoolmobileapp"
     },
     "android": {
+      "package": "com.odyseyy.schoolmobileapp",
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -32,11 +36,19 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "db972768-3c1c-454b-9fd7-143009708265"
+      }
     }
   }
 }

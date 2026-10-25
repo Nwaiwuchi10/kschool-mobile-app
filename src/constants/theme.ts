@@ -1,65 +1,138 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Theme palette for KSCHOOLMATE mobile application.
+ * Mirrors the light and sleek modern dark mode design system.
  */
-
-import '@/global.css';
-
-import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    // Base backgrounds
+    background: '#FAFAFA',
+    surface: '#FFFFFF',
+    surfaceAlt: '#F3F4F6',
+    border: '#E5E7EB',
+    borderLight: '#F3F4F6',
+
+    // Text colors
+    text: '#1A1A1A',
+    textSecondary: '#6B7280',
+    textMuted: '#9CA3AF',
+    textInverse: '#FFFFFF',
+
+    // Primary Brand colors (KSCHOOLMATE Teal)
+    primary: '#127A71',
+    primaryDark: '#0D5C55',
+    primaryLight: '#E0F2F1',
+    primaryMint: '#D1FAE5',
+
+    // Accent & Highlights
+    cardHighlightBg: '#E0F2F1',
+    cardHighlightBorder: '#127A71',
+    badgeYellowBg: '#FEF3C7',
+    badgeYellowText: '#D97706',
+
+    // Status colors
+    success: '#10B981',
+    successBg: '#D1FAE5',
+    warning: '#F59E0B',
+    warningBg: '#FEF3C7',
+    danger: '#EF4444',
+    dangerBg: '#FEE2E2',
+    info: '#0284C7',
+    infoBg: '#E0F2FE',
+
+    // UI inputs & components
+    inputBg: '#FFFFFF',
+    inputBorder: '#E5E7EB',
+    inputText: '#1A1A1A',
+    placeholder: '#9CA3AF',
+    overlay: 'rgba(0, 0, 0, 0.55)',
+    shadow: '#000000',
+
+    // Navigation & Tabs
+    tabBarBg: '#FFFFFF',
+    tabBarBorder: '#F3F4F6',
+    tabIconActive: '#127A71',
+    tabIconInactive: '#9CA3AF',
+    headerBg: '#FAFAFA',
+
+    // Compatibility keys
+    backgroundElement: '#F3F4F6',
+    backgroundSelected: '#E0F2F1',
   },
+
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
-  },
-} as const;
+    // Base backgrounds
+    background: '#121212',
+    surface: '#1E1E1E',
+    surfaceAlt: '#262626',
+    border: '#2E3135',
+    borderLight: '#252525',
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+    // Text colors
+    text: '#F3F4F6',
+    textSecondary: '#9CA3AF',
+    textMuted: '#6B7280',
+    textInverse: '#121212',
 
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
+    // Primary Brand colors (KSCHOOLMATE Teal with dark mode vibrant touch)
+    primary: '#1AB5A7',
+    primaryDark: '#127A71',
+    primaryLight: 'rgba(18, 122, 113, 0.25)',
+    primaryMint: 'rgba(26, 181, 167, 0.18)',
+
+    // Accent & Highlights
+    cardHighlightBg: '#1A2E2C',
+    cardHighlightBorder: '#1AB5A7',
+    badgeYellowBg: 'rgba(245, 158, 11, 0.18)',
+    badgeYellowText: '#FBBF24',
+
+    // Status colors
+    success: '#10B981',
+    successBg: 'rgba(16, 185, 129, 0.18)',
+    warning: '#F59E0B',
+    warningBg: 'rgba(245, 158, 11, 0.18)',
+    danger: '#EF4444',
+    dangerBg: 'rgba(239, 68, 68, 0.18)',
+    info: '#38BDF8',
+    infoBg: 'rgba(56, 189, 248, 0.18)',
+
+    // UI inputs & components
+    inputBg: '#1E1E1E',
+    inputBorder: '#374151',
+    inputText: '#F3F4F6',
+    placeholder: '#6B7280',
+    overlay: 'rgba(0, 0, 0, 0.75)',
+    shadow: '#000000',
+
+    // Navigation & Tabs
+    tabBarBg: '#181818',
+    tabBarBorder: '#2E3135',
+    tabIconActive: '#1AB5A7',
+    tabIconInactive: '#6B7280',
+    headerBg: '#121212',
+
+    // Compatibility keys
+    backgroundElement: '#262626',
+    backgroundSelected: '#1A2E2C',
   },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: 'var(--font-display)',
-    serif: 'var(--font-serif)',
-    rounded: 'var(--font-rounded)',
-    mono: 'var(--font-mono)',
-  },
-});
+};
+
+export type Theme = 'light' | 'dark';
+export type ThemeColors = typeof Colors.light;
+export type ThemeColor = keyof ThemeColors;
 
 export const Spacing = {
-  half: 2,
-  one: 4,
-  two: 8,
+  half: 4,
+  one: 8,
+  two: 12,
   three: 16,
-  four: 24,
-  five: 32,
-  six: 64,
-} as const;
+  four: 20,
+  five: 24,
+  six: 32,
+  eight: 40,
+};
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
-export const MaxContentWidth = 800;
+export const Fonts = {
+  mono: 'monospace',
+};
+
