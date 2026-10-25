@@ -4,22 +4,20 @@ import Constants from 'expo-constants';
 import { storageService } from './storage.service';
 
 export const getApiBaseUrl = (): string => {
-  // Respect environment variable if defined (e.g. Vercel backend for EAS builds)
+  // During local development (emulator/simulator/Metro), prioritize local backend on port 3500
+  if (__DEV__) {
+    const localHost = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+    const localUrl = `http://${localHost}:3500`;
+    console.log(`[API DEV] Connecting to local Backend at: ${localUrl}`);
+    return localUrl;
+  }
+
+  // In production / EAS cloud builds, respect EXPO_PUBLIC_API_URL
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL;
   }
 
-  // Always prioritize local backend on port 3500 for local development
-  let url = 'http://192.168.0.106:3500';
-
-  if (Platform.OS === 'android') {
-    url = 'http://192.168.0.106:3500';
-  } else {
-    url = 'http://192.168.0.106:3500';
-  }
-
-  console.log(`[API] Connecting to Backend at: ${url}`);
-  return url;
+  return 'http://10.0.2.2:3500';
 };
 
 export const api = axios.create({
