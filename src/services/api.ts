@@ -4,13 +4,18 @@ import Constants from 'expo-constants';
 import { storageService } from './storage.service';
 
 export const getApiBaseUrl = (): string => {
-  // Always prioritize local backend on port 3500 for development
-  let url = 'http://10.0.2.2:3500';
+  // Respect environment variable if defined (e.g. Vercel backend for EAS builds)
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+
+  // Always prioritize local backend on port 3500 for local development
+  let url = 'http://192.168.0.106:3500';
 
   if (Platform.OS === 'android') {
-    url = 'http://10.0.2.2:3500';
+    url = 'http://192.168.0.106:3500';
   } else {
-    url = 'http://localhost:3500';
+    url = 'http://192.168.0.106:3500';
   }
 
   console.log(`[API] Connecting to Backend at: ${url}`);
@@ -62,11 +67,11 @@ api.interceptors.response.use(
 
     if (error.response?.status === 401) {
       // Token expired or invalid session - clear credentials automatically
-      storageService.clearAuth().catch(() => {});
+      storageService.clearAuth().catch(() => { });
       try {
         const { router } = require('expo-router');
         router.replace('/login');
-      } catch {}
+      } catch { }
       message = 'Your session has expired. Please log in again.';
     }
 
