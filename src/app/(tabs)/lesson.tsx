@@ -533,11 +533,14 @@ export default function LessonScreen() {
                   pathname: '/topic-details',
                   params: {
                     topicId: params.topicId,
-                    subjectName: subjectName.split(' > ')[0] || subjectName,
+                    topicTitle: subjectName.split(' > ')[1] || params.title || 'Topic Details',
+                    subjectName: subjectName.split(' > ')[0] || 'Subject',
                   },
                 });
               } else if (router.canGoBack()) {
                 router.back();
+              } else {
+                router.replace('/(tabs)/subjects');
               }
             }}
           >
