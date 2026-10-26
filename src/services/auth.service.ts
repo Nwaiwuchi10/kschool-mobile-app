@@ -10,6 +10,7 @@ export interface User {
   role?: string;
   class?: string;
   school?: string;
+  avatar?: string;
 }
 
 export interface AuthResponse {
@@ -95,6 +96,16 @@ export const authService = {
       code: data.code.trim(),
       newPassword: data.newPassword,
     });
+    return response.data;
+  },
+
+  async changePassword(data: { currentPassword: string; newPassword: string }): Promise<{ message: string }> {
+    const response = await api.post<{ message: string }>('/auth/change-password', data);
+    return response.data;
+  },
+
+  async updateProfile(data: Partial<User>): Promise<{ message: string; user: User }> {
+    const response = await api.patch<{ message: string; user: User }>('/auth/profile', data);
     return response.data;
   },
 

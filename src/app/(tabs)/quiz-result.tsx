@@ -14,11 +14,13 @@ export default function QuizResultScreen() {
     total?: string;
     passed?: string;
     title?: string;
+    topicId?: string;
+    lessonId?: string;
   }>();
 
   const scoreNum = params.score ? parseInt(params.score, 10) : 0;
   const totalNum = params.total ? parseInt(params.total, 10) : 0;
-  const percent = totalNum > 0 ? Math.round((scoreNum / totalNum) * 100) : 0;
+  const percent = totalNum > 0 ? Math.min(100, Math.max(0, Math.round((scoreNum / totalNum) * 100))) : 0;
   const isPassed = params.passed ? params.passed === 'true' : percent >= 70;
   const incorrectNum = Math.max(0, totalNum - scoreNum);
   const quizTitle = params.title || 'Curriculum Quiz';
@@ -102,11 +104,29 @@ export default function QuizResultScreen() {
         <View style={styles.actionsContainer}>
           <PrimaryButton
             title="Continue Journey"
-            onPress={() => router.push('/(tabs)')}
+            onPress={() => {
+              if (params.topicId) {
+                router.replace({
+                  pathname: '/topic-details',
+                  params: { topicId: params.topicId },
+                });
+              } else {
+                router.replace('/(tabs)/subjects');
+              }
+            }}
           />
           <TouchableOpacity
             style={[styles.secondaryBtn, styles.btnOutlineTeal, { borderColor: colors.primary, backgroundColor: colors.surface }]}
-            onPress={() => router.push('/lesson')}
+            onPress={() => {
+              if (params.lessonId) {
+                router.push({
+                  pathname: '/lesson',
+                  params: { id: params.lessonId, topicId: params.topicId },
+                });
+              } else {
+                router.push('/lesson');
+              }
+            }}
           >
             <Text style={[styles.btnTextTeal, { color: colors.primary }]}>Review Lesson</Text>
           </TouchableOpacity>

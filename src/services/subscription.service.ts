@@ -32,8 +32,11 @@ export interface AccessCheckResult {
 
 export interface InitPaymentResult {
   success: boolean;
+  authorizationUrl?: string;
   checkoutUrl: string;
+  accessCode?: string;
   paymentReference: string;
+  reference?: string;
   amount: number;
   packageName: string;
   academicSession: string;
@@ -111,25 +114,40 @@ export const subscriptionService = {
   },
 
   /**
-   * Initialize Monnify payment
+   * Initialize Paystack payment
    */
-  async initializeMonnify(packageId: string, redirectUrl?: string): Promise<InitPaymentResult> {
-    const res = await api.post<InitPaymentResult>('/payments/monnify/initialize', {
+  async initializePaystack(packageId: string, callbackUrl?: string): Promise<InitPaymentResult> {
+    const res = await api.post<InitPaymentResult>('/payments/paystack/initialize', {
       packageId,
-      redirectUrl,
+      callbackUrl,
+      redirectUrl: callbackUrl,
     });
     return res.data;
   },
 
   /**
-   * Verify Monnify payment and activate subscription
+   * Verify Paystack payment and activate subscription
    */
-  async verifyMonnify(reference: string, packageId?: string): Promise<{ success: boolean; message: string; subscription: any }> {
-    const res = await api.post('/payments/monnify/verify', {
+  async verifyPaystack(reference: string, packageId?: string): Promise<{ success: boolean; message: string; subscription: any }> {
+    const res = await api.post('/payments/paystack/verify', {
       reference,
       packageId,
     });
     return res.data;
+  },
+
+  /**
+   * Initialize Monnify payment (Alias to Paystack)
+   */
+  async initializeMonnify(packageId: string, redirectUrl?: string): Promise<InitPaymentResult> {
+    return this.initializePaystack(packageId, redirectUrl);
+  },
+
+  /**
+   * Verify Monnify payment (Alias to Paystack)
+   */
+  async verifyMonnify(reference: string, packageId?: string): Promise<{ success: boolean; message: string; subscription: any }> {
+    return this.verifyPaystack(reference, packageId);
   },
 };
 

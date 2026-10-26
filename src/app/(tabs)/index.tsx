@@ -1,6 +1,6 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Image } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -77,9 +77,21 @@ export default function HomeScreen() {
         
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.profileSection}>
-            <View style={[styles.avatar, { backgroundColor: colors.primaryMint, borderColor: colors.primary }]}>
-              <Text style={[styles.avatarText, { color: colors.primary }]}>{initial}</Text>
+          <TouchableOpacity 
+            style={styles.profileSection}
+            onPress={() => router.push('/profile')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.avatar, { backgroundColor: colors.primaryMint, borderColor: colors.primary, overflow: 'hidden' }]}>
+              {user?.avatar ? (
+                <Image
+                  source={{ uri: user.avatar }}
+                  style={{ width: '100%', height: '100%' }}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Text style={[styles.avatarText, { color: colors.primary }]}>{initial}</Text>
+              )}
             </View>
             <View>
               <Text style={[styles.greeting, { color: colors.text }]}>Good day, {displayName}</Text>
@@ -87,7 +99,7 @@ export default function HomeScreen() {
                 Enrolled in <Text style={{ fontWeight: '700', color: colors.primary }}>{currentClass}</Text>
               </Text>
             </View>
-          </View>
+          </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.notificationBtn, { backgroundColor: colors.surface, borderColor: colors.border }]} 
             onPress={() => router.push('/notifications')}

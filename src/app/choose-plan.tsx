@@ -119,7 +119,7 @@ export default function ChoosePlanScreen() {
       {/* Footer */}
       <View style={styles.footer}>
         <PrimaryButton title="Continue to Payment" onPress={handleContinue} />
-        <Text style={[styles.footerText, { color: colors.textMuted }]}>Secure payment powered by Monnify</Text>
+        <Text style={[styles.footerText, { color: colors.textMuted }]}>Secure payment powered by Paystack</Text>
       </View>
     </SafeAreaView>
   );

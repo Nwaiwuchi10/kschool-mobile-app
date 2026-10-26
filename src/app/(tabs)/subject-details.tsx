@@ -1,11 +1,30 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { subjectService, MobileSubject } from '@/services/subject.service';
+import { subjectService } from '@/services/subject.service';
+import { subscriptionService } from '@/services/subscription.service';
 import { useAppTheme } from '@/hooks/useAppTheme';
+
+export interface CurriculumItem {
+  id: string; // e.g. "01", "02"
+  _id: string;
+  title: string;
+  subtitle: string;
+  status: 'active' | 'completed' | 'locked';
+  isLocked: boolean;
+  topicId?: string;
+  duration?: string;
+}
 
 export default function SubjectDetailsScreen() {
   const { colors, isDark } = useAppTheme();
@@ -13,8 +32,8 @@ export default function SubjectDetailsScreen() {
   const subjectId = params.id;
   const subjectName = params.name || 'Subject Curriculum';
 
-  const [units, setUnits] = useState<any[]>([]);
-  const [progress, setProgress] = useState(0);
+  const [items, setItems] = useState<CurriculumItem[]>([]);
+  const [progress, setProgress] = useState(10);
   const [isLoading, setIsLoading] = useState(true);
   const [hasSubscription, setHasSubscription] = useState(false);
 
@@ -24,44 +43,75 @@ export default function SubjectDetailsScreen() {
 
       try {
         setIsLoading(true);
-        const { subscriptionService } = await import('@/services/subscription.service');
         const [subStatus, data] = await Promise.all([
           subscriptionService.getMyActiveSubscription().catch(() => null),
           subjectService.getSubjectById(subjectId),
         ]);
 
-        const isSubscribed = !!subStatus && (subStatus.status === 'active' || subStatus.status === 'grace');
+        const isSubscribed =
+          !!subStatus &&
+          (subStatus.status === 'active' || subStatus.status === 'grace');
         setHasSubscription(isSubscribed);
 
-        if (data && data.topics && data.topics.length > 0) {
-          const mappedUnits = data.topics.map((t, idx) => {
-            const numStr = (idx + 1).toString().padStart(2, '0');
-            // If user has subscription: all topics unlocked.
-            // If first timer (no subscription): only first topic (idx === 0) is accessible, others locked.
-            let status = 'locked';
-            if (isSubscribed) {
-              status = idx === 0 ? 'completed' : 'active';
-            } else {
-              status = idx === 0 ? 'active' : 'locked';
-            }
+        const topics = data?.topics || [];
+        const flattenedItems: CurriculumItem[] = [];
 
-            return {
-              id: numStr,
-              title: t.title,
-              status,
-              _id: t._id,
-              isLocked: !isSubscribed && idx > 0,
-            };
-          });
-          setUnits(mappedUnits);
-          setProgress(data.progress || (isSubscribed ? 30 : 10));
-        } else {
-          setUnits([]);
-          setProgress(0);
-        }
+        // Check if topics exist and if any topic has lessons
+        topics.forEach((topic: any) => {
+          const lessons = topic.lessons || [];
+          if (lessons.length > 0) {
+            lessons.forEach((l: any) => {
+              flattenedItems.push({
+                id: '',
+                _id: l._id,
+                title: l.title,
+                subtitle: l.format || (l.audioUrl ? 'TTS Audio & Text' : 'Text Lesson'),
+                status: 'locked',
+                isLocked: true,
+                topicId: topic._id,
+                duration: l.duration || '10 mins',
+              });
+            });
+          } else {
+            flattenedItems.push({
+              id: '',
+              _id: topic._id,
+              title: topic.title,
+              subtitle: 'Curriculum Topic',
+              status: 'locked',
+              isLocked: true,
+              topicId: topic._id,
+            });
+          }
+        });
+
+        // Set index numbering and sequential lock/unlock status
+        const mappedList: CurriculumItem[] = flattenedItems.map((item, idx) => {
+          const numStr = (idx + 1).toString().padStart(2, '0');
+          let status: 'active' | 'completed' | 'locked' = 'locked';
+          let isLocked = idx > 0;
+
+          if (idx === 0) {
+            status = 'active';
+            isLocked = false;
+          } else {
+            status = isSubscribed ? 'completed' : 'locked';
+            isLocked = !isSubscribed;
+          }
+
+          return {
+            ...item,
+            id: numStr,
+            status,
+            isLocked,
+          };
+        });
+
+        setItems(mappedList);
+        setProgress(data?.progress || (isSubscribed ? 45 : 10));
       } catch (err) {
-        console.warn('Failed to fetch subject details from backend:', err);
-        setUnits([]);
+        console.warn('Failed to fetch subject curriculum details:', err);
+        setItems([]);
       } finally {
         setIsLoading(false);
       }
@@ -70,24 +120,63 @@ export default function SubjectDetailsScreen() {
     fetchSubjectDetails();
   }, [subjectId]);
 
+  const handleItemPress = (item: CurriculumItem) => {
+    if (item.isLocked) {
+      router.push('/premium-access');
+      return;
+    }
+
+    router.push({
+      pathname: '/lesson',
+      params: {
+        id: item._id,
+        title: item.title,
+        subject: `${subjectName} > ${item.title}`,
+        topicId: item.topicId || '',
+      },
+    });
+  };
+
+  const handleContinueLearning = () => {
+    const activeItem = items.find((i) => !i.isLocked) || items[0];
+    if (activeItem) {
+      handleItemPress(activeItem);
+    } else {
+      router.push('/lesson');
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)');
+            }
+          }}
+        >
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>{subjectName}</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        
-        {/* Overall Progress Card */}
-        <View style={[styles.progressCard, { backgroundColor: colors.cardHighlightBg, borderColor: colors.cardHighlightBorder }]}>
+        {/* Overall Progress Card (Image 1 & 3 style) */}
+        <View
+          style={[
+            styles.progressCard,
+            { backgroundColor: colors.cardHighlightBg, borderColor: colors.cardHighlightBorder },
+          ]}
+        >
           <View style={[styles.progressCardIcon, { backgroundColor: colors.primary }]}>
-            <Ionicons name="layers" size={20} color="#FFFFFF" />
+            <Ionicons name="layers" size={22} color="#FFFFFF" />
           </View>
           <View style={styles.progressCardContent}>
             <View style={styles.progressCardHeader}>
@@ -95,115 +184,103 @@ export default function SubjectDetailsScreen() {
               <Text style={[styles.progressCardPercent, { color: colors.primary }]}>{progress}%</Text>
             </View>
             <View style={[styles.progressBarBg, { backgroundColor: colors.surfaceAlt }]}>
-              <View style={[styles.progressBarFill, { width: `${progress}%`, backgroundColor: colors.primary }]} />
+              <View
+                style={[
+                  styles.progressBarFill,
+                  { width: `${progress}%`, backgroundColor: colors.primary },
+                ]}
+              />
             </View>
           </View>
         </View>
 
-        {/* Syllabus Units Header */}
+        {/* Syllabus Units Header with Sequential Order tag */}
         <View style={styles.syllabusHeader}>
           <Text style={[styles.syllabusTitle, { color: colors.text }]}>Syllabus Units</Text>
           <View style={styles.sequentialTag}>
-            <Ionicons name="lock-closed-outline" size={12} color={colors.primary} style={{ marginRight: 4 }} />
+            <Ionicons name="lock-closed-outline" size={13} color={colors.primary} style={{ marginRight: 4 }} />
             <Text style={[styles.sequentialText, { color: colors.primary }]}>Sequential Order</Text>
           </View>
         </View>
 
-        {/* Units List */}
+        {/* Content Body */}
         {isLoading ? (
           <View style={styles.loadingBox}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading curriculum units...</Text>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading syllabus topics...</Text>
           </View>
-        ) : units.length === 0 ? (
+        ) : items.length === 0 ? (
           <View style={[styles.emptyContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Ionicons name="documents-outline" size={48} color={colors.textMuted} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>No Syllabus Units Yet</Text>
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>The administrator will upload topics and lessons for {subjectName} soon.</Text>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No Lessons Uploaded Yet</Text>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+              The administrator will upload topics and lessons for {subjectName} soon.
+            </Text>
           </View>
         ) : (
           <View style={styles.unitsContainer}>
-            {units.map((unit) => {
-              const handleOpenUnit = () => {
-                router.push({
-                  pathname: '/topic-details',
-                  params: {
-                    topicId: unit._id || unit.id,
-                    topicTitle: unit.title,
-                    subjectName,
-                  },
-                });
-              };
-
-              if (unit.status === 'completed') {
+            {items.map((item, idx) => {
+              if (item.status === 'active') {
                 return (
-                  <TouchableOpacity
-                    key={unit.id}
-                    style={[styles.unitCard, { backgroundColor: colors.surface, borderColor: colors.cardHighlightBorder }]}
-                    onPress={handleOpenUnit}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.unitLeft}>
-                      <View style={[styles.unitNumberBox, { backgroundColor: colors.primaryMint }]}>
-                        <Text style={[styles.unitNumberText, { color: colors.primary }]}>{unit.id}</Text>
-                      </View>
-                      <View>
-                        <Text style={[styles.unitTitle, { color: colors.text }]}>{unit.title}</Text>
-                        <Text style={[styles.unitSubtitle, { color: colors.textSecondary }]}>Completed</Text>
-                      </View>
-                    </View>
-                    <View style={[styles.completedIcon, { backgroundColor: colors.primary }]}>
-                      <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-                    </View>
-                  </TouchableOpacity>
-                );
-              }
-
-              if (unit.status === 'active') {
-                return (
-                  <View key={unit.id} style={styles.activeContainer}>
+                  <View key={item._id || idx} style={styles.activeUnitWrapper}>
+                    {/* Active highlighted green card */}
                     <TouchableOpacity
-                      style={[styles.unitCard, { backgroundColor: colors.cardHighlightBg, borderColor: colors.primary, borderWidth: 2 }]}
-                      onPress={handleOpenUnit}
-                      activeOpacity={0.7}
+                      style={[
+                        styles.unitCardActive,
+                        { backgroundColor: colors.cardHighlightBg, borderColor: colors.primary },
+                      ]}
+                      onPress={() => handleItemPress(item)}
+                      activeOpacity={0.8}
                     >
                       <View style={styles.unitLeft}>
-                        <View style={[styles.unitNumberBox, { backgroundColor: colors.primary }]}>
-                          <Text style={[styles.unitNumberText, { color: '#FFFFFF' }]}>{unit.id}</Text>
+                        <View style={[styles.unitNumberBoxActive, { backgroundColor: colors.primary }]}>
+                          <Text style={styles.unitNumberTextActive}>{item.id}</Text>
                         </View>
                         <View>
-                          <Text style={[styles.unitTitle, { color: colors.text }]}>{unit.title}</Text>
+                          <Text style={[styles.unitTitle, { color: colors.text }]}>{item.title}</Text>
                           <Text style={[styles.unitSubtitleActive, { color: colors.primary }]}>Active Unit</Text>
                         </View>
                       </View>
                       <Ionicons name="play-circle" size={32} color={colors.primary} />
                     </TouchableOpacity>
+
+                    {/* Prominent Continue Learning Button (Image 1 & 3 style) */}
                     <TouchableOpacity
                       style={[styles.continueButton, { backgroundColor: colors.primary }]}
-                      onPress={handleOpenUnit}
+                      onPress={handleContinueLearning}
+                      activeOpacity={0.85}
                     >
-                      <Text style={styles.continueButtonText}>Continue Lesson</Text>
+                      <Text style={styles.continueButtonText}>Continue Learning</Text>
                     </TouchableOpacity>
                   </View>
                 );
               }
 
-              // Locked
+              // Lesson topic card (Image 3 style: 02 Pronouns, 03 Verbs, etc. with Lock outline)
               return (
                 <TouchableOpacity
-                  key={unit.id}
-                  style={[styles.unitCard, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
-                  onPress={() => router.push('/premium-access')}
+                  key={item._id || idx}
+                  style={[
+                    styles.unitCardLocked,
+                    { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+                  ]}
+                  onPress={() => handleItemPress(item)}
                   activeOpacity={0.7}
                 >
                   <View style={styles.unitLeft}>
-                    <Text style={[styles.unitNumberTextLocked, { color: colors.textMuted }]}>{unit.id}</Text>
-                    <View style={{ marginLeft: 24 }}>
-                      <Text style={[styles.unitTitleLocked, { color: colors.textMuted }]}>{unit.title}</Text>
-                      <Text style={[styles.unitSubtitleLocked, { color: colors.warning }]}>Premium Topic • Tap to Unlock</Text>
+                    <Text style={[styles.unitNumberTextLocked, { color: colors.textMuted }]}>{item.id}</Text>
+                    <View style={{ marginLeft: 20 }}>
+                      <Text style={[styles.unitTitleLocked, { color: colors.textSecondary }]}>{item.title}</Text>
+                      <Text style={[styles.unitSubtitleLocked, { color: colors.textMuted }]}>
+                        {item.isLocked ? 'Locked Lesson' : item.subtitle}
+                      </Text>
                     </View>
                   </View>
-                  <Ionicons name="lock-closed" size={20} color={colors.warning} />
+                  <Ionicons
+                    name={item.isLocked ? 'lock-closed-outline' : 'chevron-forward'}
+                    size={20}
+                    color={colors.textMuted}
+                  />
                 </TouchableOpacity>
               );
             })}
@@ -217,7 +294,6 @@ export default function SubjectDetailsScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
   },
   header: {
     flexDirection: 'row',
@@ -232,32 +308,29 @@ const styles = StyleSheet.create({
     marginLeft: -8,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
-    color: '#1A1A1A',
+    letterSpacing: -0.3,
   },
   container: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingBottom: 40,
   },
   progressCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#D1FAE5', // Light cyan background
-    borderWidth: 1,
-    borderColor: '#127A71',
-    borderRadius: 16,
+    borderWidth: 1.2,
+    borderRadius: 20,
     padding: 16,
-    marginBottom: 32,
+    marginBottom: 28,
   },
   progressCardIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: '#127A71',
+    width: 46,
+    height: 46,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 14,
   },
   progressCardContent: {
     flex: 1,
@@ -271,21 +344,18 @@ const styles = StyleSheet.create({
   progressCardTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#1A1A1A',
   },
   progressCardPercent: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#127A71',
   },
   progressBarBg: {
     height: 6,
-    backgroundColor: '#FFFFFF',
     borderRadius: 3,
+    overflow: 'hidden',
   },
   progressBarFill: {
     height: 6,
-    backgroundColor: '#127A71',
     borderRadius: 3,
   },
   syllabusHeader: {
@@ -297,7 +367,7 @@ const styles = StyleSheet.create({
   syllabusTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#1A1A1A',
+    letterSpacing: -0.3,
   },
   sequentialTag: {
     flexDirection: 'row',
@@ -306,116 +376,90 @@ const styles = StyleSheet.create({
   sequentialText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#127A71',
   },
   loadingBox: {
-    paddingVertical: 32,
+    paddingVertical: 40,
     alignItems: 'center',
   },
   loadingText: {
-    marginTop: 8,
+    marginTop: 10,
     fontSize: 13,
-    color: '#6B7280',
   },
   unitsContainer: {
     gap: 12,
   },
-  unitCard: {
+  activeUnitWrapper: {
+    gap: 10,
+    marginBottom: 4,
+  },
+  unitCardActive: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderRadius: 20,
     padding: 16,
-    borderWidth: 1,
-  },
-  unitCardCompleted: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D1FAE5',
-  },
-  unitCardActive: {
-    backgroundColor: '#D1FAE5',
-    borderColor: '#127A71',
+    borderWidth: 1.5,
   },
   unitCardLocked: {
-    backgroundColor: '#F9FAFB',
-    borderColor: '#F3F4F6',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
   },
   unitLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  unitNumberBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  unitNumberBoxCompleted: {
-    backgroundColor: '#D1FAE5',
+    flex: 1,
   },
   unitNumberBoxActive: {
-    backgroundColor: '#127A71',
-  },
-  unitNumberText: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  unitNumberTextCompleted: {
-    color: '#127A71',
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
   },
   unitNumberTextActive: {
+    fontSize: 16,
+    fontWeight: '800',
     color: '#FFFFFF',
   },
   unitNumberTextLocked: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#D1D5DB',
-    width: 40,
+    width: 32,
     textAlign: 'center',
   },
   unitTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
-    color: '#1A1A1A',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   unitTitleLocked: {
     fontSize: 16,
-    fontWeight: '800',
-    color: '#9CA3AF',
-    marginBottom: 4,
-  },
-  unitSubtitle: {
-    fontSize: 12,
-    color: '#6B7280',
+    fontWeight: '700',
+    marginBottom: 2,
   },
   unitSubtitleActive: {
     fontSize: 12,
-    color: '#127A71',
+    fontWeight: '600',
   },
   unitSubtitleLocked: {
     fontSize: 12,
-    color: '#D1D5DB',
-  },
-  completedIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#127A71',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  activeContainer: {
-    gap: 8,
+    fontWeight: '500',
   },
   continueButton: {
-    backgroundColor: '#127A71',
-    height: 48,
-    borderRadius: 24,
+    height: 50,
+    borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#127A71',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
   },
   continueButtonText: {
     fontSize: 16,
@@ -423,10 +467,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   emptyContainer: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
     padding: 32,
     alignItems: 'center',
     justifyContent: 'center',
@@ -435,12 +477,10 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#1A1A1A',
     marginTop: 12,
   },
   emptyText: {
     fontSize: 14,
-    color: '#6B7280',
     textAlign: 'center',
     marginTop: 6,
     lineHeight: 20,

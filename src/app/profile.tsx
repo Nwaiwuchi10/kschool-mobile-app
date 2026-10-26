@@ -32,9 +32,17 @@ export default function ProfileScreen() {
           {/* Profile Info */}
           <View style={styles.profileInfoContainer}>
             <View style={styles.avatarBorder}>
-              <View style={[styles.avatarContainer, { backgroundColor: colors.surfaceAlt }]}>
-                <Text style={{ fontSize: 32, fontWeight: '800', color: colors.primary }}>{initial}</Text>
-              </View>
+              {user?.avatar ? (
+                <Image
+                  source={{ uri: user.avatar }}
+                  style={styles.avatarContainer}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={[styles.avatarContainer, { backgroundColor: colors.surfaceAlt }]}>
+                  <Text style={{ fontSize: 32, fontWeight: '800', color: colors.primary }}>{initial}</Text>
+                </View>
+              )}
             </View>
             <Text style={styles.name}>{fullName}</Text>
             <View style={styles.classPill}>

@@ -43,22 +43,25 @@ export default function PaymentSummaryScreen() {
   const handleStartPayment = async () => {
     try {
       setIsInitializing(true);
-      const res = await subscriptionService.initializeMonnify(
+      const res = await subscriptionService.initializePaystack(
         params.packageId || 'default',
         'https://kschoolmate.com/payment-callback',
       );
 
-      if (res && res.paymentReference) {
-        setCurrentReference(res.paymentReference);
-        setCheckoutUrl(res.checkoutUrl);
+      const targetUrl = res?.authorizationUrl || res?.checkoutUrl;
+      const ref = res?.reference || res?.paymentReference;
+
+      if (targetUrl) {
+        setCurrentReference(ref || `PAYSTACK-KSM-${Date.now()}`);
+        setCheckoutUrl(targetUrl);
         setShowWebView(true);
       }
     } catch (err: any) {
       console.error('Payment init error:', err);
-      // Fallback sandbox simulation for development/testing
-      const fallbackRef = `KSM-${Date.now()}`;
+      // Fallback Paystack simulator for development/testing
+      const fallbackRef = `PAYSTACK-KSM-${Date.now()}`;
       setCurrentReference(fallbackRef);
-      setCheckoutUrl(`https://sandbox.monnify.com/checkout/${fallbackRef}`);
+      setCheckoutUrl(`https://checkout.paystack.com/${fallbackRef}`);
       setShowWebView(true);
     } finally {
       setIsInitializing(false);
@@ -68,9 +71,12 @@ export default function PaymentSummaryScreen() {
   const handleWebViewNavigationStateChange = async (navState: any) => {
     const { url } = navState;
 
-    // Detect callback redirect or payment completion
+    // Detect callback redirect or payment completion for Paystack
     if (
       url.includes('payment-callback') ||
+      url.includes('trxref=') ||
+      url.includes('reference=') ||
+      url.includes('paystack.com/success') ||
       url.includes('paymentStatus=PAID') ||
       url.includes('payment_success') ||
       url.includes('responseCode=0')
@@ -83,8 +89,8 @@ export default function PaymentSummaryScreen() {
   const confirmAndActivate = async () => {
     try {
       setIsInitializing(true);
-      const ref = currentReference || `KSM-${Date.now()}`;
-      await subscriptionService.verifyMonnify(ref, params.packageId);
+      const ref = currentReference || `PAYSTACK-KSM-${Date.now()}`;
+      await subscriptionService.verifyPaystack(ref, params.packageId);
 
       router.push({
         pathname: '/payment-success',
@@ -101,7 +107,7 @@ export default function PaymentSummaryScreen() {
       router.push({
         pathname: '/payment-success',
         params: {
-          reference: currentReference || `KSM-${Date.now()}`,
+          reference: currentReference || `PAYSTACK-KSM-${Date.now()}`,
           packageName,
           academicSession,
           amount: priceFormatted,
@@ -170,8 +176,8 @@ export default function PaymentSummaryScreen() {
             <Ionicons name="card-outline" size={24} color="#0D9488" />
           </View>
           <View style={styles.methodInfo}>
-            <Text style={styles.methodTitle}>Monnify</Text>
-            <Text style={styles.methodDesc}>Cards, transfer and bank payment</Text>
+            <Text style={styles.methodTitle}>Paystack</Text>
+            <Text style={styles.methodDesc}>Cards, bank transfer, USSD and Apple Pay</Text>
           </View>
           <View style={styles.radioOuter}>
             <View style={styles.radioInner} />
@@ -182,14 +188,14 @@ export default function PaymentSummaryScreen() {
       {/* Footer */}
       <View style={styles.footer}>
         <PrimaryButton
-          title={isInitializing ? 'Connecting to Monnify...' : `Pay ${priceFormatted}`}
+          title={isInitializing ? 'Connecting to Paystack...' : `Pay ${priceFormatted}`}
           onPress={handleStartPayment}
           disabled={isInitializing}
         />
         <Text style={styles.footerText}>Your payment details are encrypted and secure.</Text>
       </View>
 
-      {/* Monnify WebView Modal */}
+      {/* Paystack WebView Modal */}
       <Modal
         visible={showWebView}
         animationType="slide"
@@ -212,7 +218,7 @@ export default function PaymentSummaryScreen() {
             >
               <Ionicons name="close" size={24} color="#1A1A1A" />
             </TouchableOpacity>
-            <Text style={styles.modalHeaderTitle}>Monnify Secure Checkout</Text>
+            <Text style={styles.modalHeaderTitle}>Paystack Secure Checkout</Text>
             <TouchableOpacity
               onPress={confirmAndActivate}
               style={styles.simulateSuccessBtn}
@@ -239,7 +245,7 @@ export default function PaymentSummaryScreen() {
                 renderLoading={() => (
                   <View style={styles.webViewLoader}>
                     <ActivityIndicator size="large" color="#127A71" />
-                    <Text style={styles.webViewLoaderText}>Connecting to Monnify gateway...</Text>
+                    <Text style={styles.webViewLoaderText}>Connecting to Paystack gateway...</Text>
                   </View>
                 )}
               />

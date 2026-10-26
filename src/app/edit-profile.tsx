@@ -1,10 +1,11 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import InputField from '@/components/ui/InputField';
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import ResponseMessageModal from '@/components/ui/ResponseMessageModal';
@@ -12,13 +13,16 @@ import { useResponseModal } from '@/hooks/useResponseModal';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useAuth } from '@/store/AuthContext';
 import { api } from '@/services/api';
+import { authService } from '@/services/auth.service';
 
 export default function EditProfileScreen() {
   const { colors, isDark } = useAppTheme();
   const { user, updateUserData } = useAuth();
   const { modalConfig, showSuccess, showError, hideModal } = useResponseModal();
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
+  const [avatar, setAvatar] = useState(user?.avatar || '');
   const [firstName, setFirstName] = useState(user?.firstName || '');
   const [lastName, setLastName] = useState(user?.lastName || '');
   const [email] = useState(user?.email || '');
@@ -27,12 +31,76 @@ export default function EditProfileScreen() {
 
   useEffect(() => {
     if (user) {
+      setAvatar(user.avatar || '');
       setFirstName(user.firstName || '');
       setLastName(user.lastName || '');
       setPhoneNumber(user.phoneNumber || '');
       setSchool(user.school || '');
     }
   }, [user]);
+
+  const handlePickImage = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        showError('Permission Required', 'Camera roll permissions are required to select a profile photo.');
+        return;
+      }
+
+      const pickerResult = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (pickerResult.canceled || !pickerResult.assets || pickerResult.assets.length === 0) {
+        return;
+      }
+
+      const asset = pickerResult.assets[0];
+      const localUri = asset.uri;
+      const filename = localUri.split('/').pop() || 'profile.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const mimeType = match ? `image/${match[1]}` : 'image/jpeg';
+
+      setIsUploadingImage(true);
+
+      const formData = new FormData();
+      formData.append('file', {
+        uri: localUri,
+        name: filename,
+        type: mimeType,
+      } as any);
+      formData.append('folder', 'kschoolmate/avatars');
+
+      const uploadRes = await api.post('/uploads', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const uploadedUrl = uploadRes.data?.url;
+      if (uploadedUrl) {
+        setAvatar(uploadedUrl);
+        updateUserData({ avatar: uploadedUrl });
+        // Also persist immediately to backend profile
+        try {
+          await authService.updateProfile({ avatar: uploadedUrl });
+        } catch (e) {
+          console.log('Background avatar sync notice:', e);
+        }
+        showSuccess('Photo Updated', 'Your profile photo has been successfully updated.');
+      } else {
+        throw new Error('Upload succeeded but no image URL was returned.');
+      }
+    } catch (err: any) {
+      console.error('Image upload failed:', err);
+      showError('Upload Failed', err?.message || 'Could not upload selected image. Please try again.');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!firstName.trim() || !lastName.trim()) {
@@ -42,17 +110,19 @@ export default function EditProfileScreen() {
 
     try {
       setIsSaving(true);
-      const payload = {
+      const payload: any = {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         phoneNumber: phoneNumber.trim() || undefined,
         school: school.trim() || undefined,
+        avatar: avatar || undefined,
       };
 
       try {
-        await api.patch('/auth/profile', payload);
+        await authService.updateProfile(payload);
       } catch (e) {
-        // If profile endpoint differs or offline, sync locally
+        // Fallback direct endpoint
+        await api.patch('/auth/profile', payload);
       }
 
       updateUserData(payload);
@@ -94,17 +164,40 @@ export default function EditProfileScreen() {
 
         {/* Profile Image Editor */}
         <View style={styles.avatarContainer}>
-          <View style={[styles.avatarBorder, { borderColor: colors.primary }]}>
-            <View style={[styles.avatarBox, { backgroundColor: colors.surfaceAlt }]}>
-              <Text style={{ fontSize: 32, fontWeight: '800', color: colors.primary }}>
-                {(firstName || 'S').charAt(0).toUpperCase()}
-              </Text>
-            </View>
+          <TouchableOpacity 
+            style={[styles.avatarBorder, { borderColor: colors.primary }]}
+            onPress={handlePickImage}
+            disabled={isUploadingImage}
+            activeOpacity={0.8}
+          >
+            {avatar ? (
+              <Image 
+                source={{ uri: avatar }} 
+                style={styles.avatarImage} 
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.avatarBox, { backgroundColor: colors.surfaceAlt }]}>
+                <Text style={{ fontSize: 32, fontWeight: '800', color: colors.primary }}>
+                  {(firstName || 'S').charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+
             <View style={styles.avatarOverlay}>
-              <Ionicons name="camera-outline" size={24} color="#FFFFFF" />
-              <Text style={styles.avatarEditText}>EDIT</Text>
+              {isUploadingImage ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="camera-outline" size={22} color="#FFFFFF" />
+                  <Text style={styles.avatarEditText}>EDIT</Text>
+                </>
+              )}
             </View>
-          </View>
+          </TouchableOpacity>
+          <Text style={[styles.avatarHint, { color: colors.textSecondary }]}>
+            Tap image to change photo
+          </Text>
         </View>
 
         {/* Form */}
@@ -224,6 +317,16 @@ const styles = StyleSheet.create({
     borderRadius: 46,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  avatarImage: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+  },
+  avatarHint: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 8,
   },
   avatarOverlay: {
     ...StyleSheet.absoluteFill as any,

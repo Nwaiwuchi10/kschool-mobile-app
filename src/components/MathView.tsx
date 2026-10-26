@@ -47,12 +47,29 @@ export const MathView: React.FC<MathViewProps> = ({
     content.includes('\\sum') ||
     content.includes('\\pm');
 
-  // If completely plain text (no HTML and no LaTeX), render native Text for speed
+  // If completely plain text (no HTML and no LaTeX), render formatted native paragraphs
   if (!hasHtml && !hasLatex) {
+    const paragraphs = content.split(/\n\s*\n/).filter((p) => p.trim().length > 0);
     return (
-      <Text style={[{ fontSize, color, lineHeight: fontSize * 1.5 }, textStyle]}>
-        {content}
-      </Text>
+      <View style={style}>
+        {paragraphs.map((p, pIdx) => (
+          <Text
+            key={pIdx}
+            style={[
+              {
+                fontSize,
+                color,
+                lineHeight: Math.round(fontSize * 1.55),
+                letterSpacing: 0.15,
+                marginBottom: pIdx === paragraphs.length - 1 ? 0 : 16,
+              },
+              textStyle,
+            ]}
+          >
+            {p.trim()}
+          </Text>
+        ))}
+      </View>
     );
   }
 

@@ -43,7 +43,7 @@ export default function ProcessingPaymentScreen() {
         </Text>
 
         <View style={styles.pillBox}>
-          <Text style={styles.pillText}>₦25,000 • Monnify</Text>
+          <Text style={styles.pillText}>₦25,000 • Paystack</Text>
         </View>
 
       </View>

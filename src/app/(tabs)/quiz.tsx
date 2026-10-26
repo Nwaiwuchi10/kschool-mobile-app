@@ -77,7 +77,7 @@ export default function QuizScreen() {
     return () => {
       isMounted = false;
     };
-  }, [params.topicId, params.quizId]);
+  }, [params.topicId, params.quizId, params.lessonId]);
 
   // Enforce access barrier for quiz
   useEffect(() => {
@@ -188,6 +188,8 @@ export default function QuizScreen() {
               total: res.totalQuestions.toString(),
               passed: res.passed ? 'true' : 'false',
               title: currentQuiz.title,
+              topicId: params.topicId,
+              lessonId: params.lessonId,
             },
           });
           return;
@@ -211,7 +213,9 @@ export default function QuizScreen() {
           score: score.toString(),
           total: totalCount.toString(),
           passed: passed ? 'true' : 'false',
-          title: currentQuiz?.title || 'Verb Assessment',
+          title: currentQuiz?.title || 'Exercise Quiz',
+          topicId: params.topicId,
+          lessonId: params.lessonId,
         },
       });
     } finally {
@@ -237,7 +241,16 @@ export default function QuizScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)/subjects');
+            }
+          }}
+        >
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>

@@ -135,8 +135,8 @@ export default function PremiumAccessScreen() {
 
       {/* Footer */}
       <View style={styles.footer}>
-        <PrimaryButton title="Subscribe with Monnify" onPress={handleSubscribe} disabled={isLoading || !selectedPkg} />
-        <Text style={[styles.footerText, { color: colors.textMuted }]}>Secure payment powered by Monnify</Text>
+        <PrimaryButton title="Subscribe with Paystack" onPress={handleSubscribe} disabled={isLoading || !selectedPkg} />
+        <Text style={[styles.footerText, { color: colors.textMuted }]}>Secure payment powered by Paystack</Text>
       </View>
     </SafeAreaView>
   );
