@@ -108,7 +108,7 @@ export default function SubjectDetailsScreen() {
         });
 
         setItems(mappedList);
-        setProgress(data?.progress || (isSubscribed ? 45 : 10));
+        setProgress(Math.min(100, Math.max(0, data?.progress || (isSubscribed ? 45 : 10))));
       } catch (err) {
         console.warn('Failed to fetch subject curriculum details:', err);
         setItems([]);

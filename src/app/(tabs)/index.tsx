@@ -57,11 +57,14 @@ export default function HomeScreen() {
     loadDashboard();
   };
 
-  const overallProgress = dashboardData?.overallProgress.percentage || 0;
+  const overallProgress = Math.min(100, Math.max(0, dashboardData?.overallProgress.percentage || 0));
   const completedTopics = dashboardData?.overallProgress.completedTopics || 0;
   const totalTopics = dashboardData?.overallProgress.totalTopics || 0;
   const currentLearning = dashboardData?.currentLearning;
-  const subjects = dashboardData?.subjects || [];
+  const subjects = (dashboardData?.subjects || []).map((s) => ({
+    ...s,
+    progress: Math.min(100, Math.max(0, s.progress || 0)),
+  }));
   const recentQuizResults = dashboardData?.recentQuizResults || [];
 
   return (
