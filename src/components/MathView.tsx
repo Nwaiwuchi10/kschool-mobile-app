@@ -161,10 +161,10 @@ export const MathView: React.FC<MathViewProps> = ({
     /* Blockquotes & Callouts */
     blockquote {
       margin: 14px 0;
-      padding: 12px 16px;
-      border-left: 4px solid #127A71;
-      background: rgba(18, 122, 113, 0.07);
-      border-radius: 0 10px 10px 0;
+      padding: 8px 12px;
+      border-left: 3px solid #127A71;
+      background: transparent;
+      border-radius: 0;
       font-style: italic;
       color: inherit;
     }
@@ -173,10 +173,9 @@ export const MathView: React.FC<MathViewProps> = ({
     img {
       max-width: 100% !important;
       height: auto !important;
-      border-radius: 12px;
+      border-radius: 8px;
       display: block;
       margin: 14px auto;
-      box-shadow: 0 3px 10px rgba(0,0,0,0.08);
       object-fit: contain;
     }
 
@@ -185,12 +184,12 @@ export const MathView: React.FC<MathViewProps> = ({
       display: block !important;
       max-width: 100% !important;
       width: 100% !important;
-      margin: 14px 0 !important;
-      border-radius: 12px !important;
+      margin: 12px 0 !important;
+      border-radius: 8px !important;
       overflow: hidden !important;
-      background: #FAFAFA !important;
-      border: 1px solid rgba(0,0,0,0.08) !important;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
     }
     .lesson-inline-img-wrapper img {
       width: 100% !important;
@@ -198,8 +197,8 @@ export const MathView: React.FC<MathViewProps> = ({
       object-fit: contain !important;
       margin: 0 !important;
       box-shadow: none !important;
-      border-radius: 0 !important;
-      background: #FFFFFF !important;
+      border-radius: 8px !important;
+      background: transparent !important;
     }
     .img-delete-btn {
       display: none !important;
