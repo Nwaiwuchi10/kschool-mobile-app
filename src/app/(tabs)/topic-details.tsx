@@ -13,8 +13,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import { lessonService, MobileLesson } from '@/services/lesson.service';
-import { quizService, MobileQuiz } from '@/services/quiz.service';
+import { quizService, MobileQuiz, QuizSubmissionResult } from '@/services/quiz.service';
 import { subscriptionService } from '@/services/subscription.service';
+import { authService } from '@/services/auth.service';
 import { useAppTheme } from '@/hooks/useAppTheme';
 
 export default function TopicDetailsScreen() {
@@ -27,6 +28,9 @@ export default function TopicDetailsScreen() {
 
   const [lessons, setLessons] = useState<any[]>([]);
   const [quizzes, setQuizzes] = useState<MobileQuiz[]>([]);
+  const [quizResults, setQuizResults] = useState<QuizSubmissionResult[]>([]);
+  const [isQuizPassed, setIsQuizPassed] = useState(false);
+  const [completedLessonIds, setCompletedLessonIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [hasSubscription, setHasSubscription] = useState<boolean>(false);
 
@@ -40,11 +44,14 @@ export default function TopicDetailsScreen() {
 
       try {
         setIsLoading(true);
-        const [fetchedLessons, fetchedQuizzes, subStatus] = await Promise.allSettled([
-          lessonService.getLessonsByTopic(params.topicId),
-          quizService.getQuizzesByTopic(params.topicId),
-          subscriptionService.getMyActiveSubscription().catch(() => null),
-        ]);
+        const [fetchedLessons, fetchedQuizzes, subStatus, userQuizResults, userProfile] =
+          await Promise.allSettled([
+            lessonService.getLessonsByTopic(params.topicId),
+            quizService.getQuizzesByTopic(params.topicId),
+            subscriptionService.getMyActiveSubscription().catch(() => null),
+            quizService.getUserResults().catch(() => []),
+            authService.getProfile().catch(() => null),
+          ]);
 
         if (isMounted) {
           const isSubscribed =
@@ -54,11 +61,44 @@ export default function TopicDetailsScreen() {
 
           setHasSubscription(isSubscribed);
 
+          // Track completed lessons from profile
+          const completedSet = new Set<string>();
+          if (
+            userProfile.status === 'fulfilled' &&
+            userProfile.value?.completedLessons &&
+            Array.isArray(userProfile.value.completedLessons)
+          ) {
+            userProfile.value.completedLessons.forEach((id: string) => completedSet.add(id));
+          }
+          setCompletedLessonIds(completedSet);
+
+          // Track passed quiz results for this topic
+          let passedThisTopic = false;
+          if (
+            userProfile.status === 'fulfilled' &&
+            userProfile.value?.attendedTopics &&
+            Array.isArray(userProfile.value.attendedTopics) &&
+            userProfile.value.attendedTopics.includes(params.topicId)
+          ) {
+            passedThisTopic = true;
+          }
+
+          if (userQuizResults.status === 'fulfilled' && Array.isArray(userQuizResults.value)) {
+            setQuizResults(userQuizResults.value);
+            const foundPassed = userQuizResults.value.some((r: any) => {
+              const qTopicId = r.quiz?.topic?._id || r.quiz?.topic;
+              return r.passed && qTopicId && qTopicId.toString() === params.topicId?.toString();
+            });
+            if (foundPassed) passedThisTopic = true;
+          }
+          setIsQuizPassed(passedThisTopic);
+
           if (fetchedLessons.status === 'fulfilled') {
             const mapped = fetchedLessons.value.map((l, idx) => {
               // For first timers (isSubscribed === false), only lesson index 0 is unlocked.
               // All other lessons (idx > 0) are locked and require payment.
               const isLocked = !isSubscribed && idx > 0;
+              const isCompleted = completedSet.has(l._id);
 
               return {
                 id: (idx + 1).toString().padStart(2, '0'),
@@ -67,6 +107,7 @@ export default function TopicDetailsScreen() {
                 format: l.audioUrl ? 'TTS Audio & Text' : 'Text Lesson',
                 duration: l.duration || '10 mins',
                 isLocked,
+                isCompleted,
               };
             });
             setLessons(mapped);
@@ -122,8 +163,21 @@ export default function TopicDetailsScreen() {
   };
 
   const handleStartLearning = () => {
+    // If topic quiz is already available and student finished lessons, prompt quiz
+    if (!isQuizPassed && quizzes.length > 0 && lessons.length > 0) {
+      const firstUncompleted = lessons.find((l) => !l.isCompleted && !l.isLocked);
+      if (firstUncompleted) {
+        handleLessonPress(firstUncompleted, lessons.indexOf(firstUncompleted));
+        return;
+      }
+      handleQuizPress(quizzes[0]);
+      return;
+    }
+
     if (lessons.length > 0) {
       handleLessonPress(lessons[0], 0);
+    } else if (quizzes.length > 0) {
+      handleQuizPress(quizzes[0]);
     } else {
       router.push('/lesson');
     }
@@ -202,14 +256,42 @@ export default function TopicDetailsScreen() {
           <View style={styles.progressRow}>
             <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>Study Progress</Text>
             <Text style={[styles.progressPercent, { color: colors.primary }]}>
-              {lessons.length > 0 ? `0/${lessons.length} Completed` : '0% Complete'}
+              {isQuizPassed
+                ? '100% Complete'
+                : lessons.length > 0
+                ? `${lessons.filter((l) => l.isCompleted).length}/${lessons.length} Completed`
+                : '0% Complete'}
             </Text>
           </View>
           <View style={[styles.progressBarBg, { backgroundColor: colors.surfaceAlt }]}>
-            <View style={[styles.progressBarFill, { width: '15%', backgroundColor: colors.primary }]} />
+            <View
+              style={[
+                styles.progressBarFill,
+                {
+                  width: `${Math.min(
+                    100,
+                    Math.max(
+                      0,
+                      isQuizPassed
+                        ? 100
+                        : lessons.length > 0
+                        ? Math.round(
+                            (lessons.filter((l) => l.isCompleted).length /
+                              (lessons.length + (quizzes.length > 0 ? 1 : 0))) *
+                              100,
+                          )
+                        : 0,
+                    ),
+                  )}%`,
+                  backgroundColor: colors.primary,
+                },
+              ]}
+            />
           </View>
           <Text style={[styles.lessonsCompletedText, { color: colors.textMuted }]}>
-            {lessons.length} lesson{lessons.length === 1 ? '' : 's'} available with AI narration
+            {isQuizPassed
+              ? 'All lessons & quiz completed. Next topic unlocked!'
+              : `${lessons.length} lesson${lessons.length === 1 ? '' : 's'} available • Quiz required to unlock next topic`}
           </Text>
         </View>
 
@@ -310,15 +392,29 @@ export default function TopicDetailsScreen() {
         {/* Quizzes Section if available */}
         {quizzes.length > 0 && (
           <View style={{ marginTop: 24, marginBottom: 12 }}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Topic Knowledge Assessment</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Topic Knowledge Assessment</Text>
+              <View style={{ backgroundColor: isQuizPassed ? colors.successBg : '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: isQuizPassed ? colors.success : '#B45309' }}>
+                  {isQuizPassed ? 'PASSED ✓' : 'REQUIRED FOR NEXT TOPIC'}
+                </Text>
+              </View>
+            </View>
             {quizzes.map((quiz) => (
               <TouchableOpacity
                 key={quiz._id}
-                style={[styles.quizCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                style={[
+                  styles.quizCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: isQuizPassed ? colors.success : colors.border,
+                    borderWidth: isQuizPassed ? 1.5 : 1,
+                  },
+                ]}
                 onPress={() => handleQuizPress(quiz)}
               >
-                <View style={[styles.quizIconBox, { backgroundColor: colors.primaryMint }]}>
-                  <Ionicons name="ribbon-outline" size={24} color={colors.primary} />
+                <View style={[styles.quizIconBox, { backgroundColor: isQuizPassed ? colors.successBg : colors.primaryMint }]}>
+                  <Ionicons name={isQuizPassed ? 'checkmark-circle' : 'ribbon-outline'} size={24} color={isQuizPassed ? colors.success : colors.primary} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.quizTitle, { color: colors.text }]}>{quiz.title}</Text>
@@ -326,7 +422,13 @@ export default function TopicDetailsScreen() {
                     {quiz.questions?.length || 0} questions • 70% passing grade
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                {isQuizPassed ? (
+                  <View style={{ backgroundColor: colors.successBg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '800', color: colors.success }}>PASSED</Text>
+                  </View>
+                ) : (
+                  <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                )}
               </TouchableOpacity>
             ))}
           </View>
@@ -334,7 +436,16 @@ export default function TopicDetailsScreen() {
 
         {/* Actions */}
         <View style={styles.actionsContainer}>
-          <PrimaryButton title="Start Learning" onPress={handleStartLearning} />
+          <PrimaryButton
+            title={
+              isQuizPassed
+                ? 'Review Lessons'
+                : lessons.length > 0 && lessons.every((l) => l.isCompleted || l.isLocked)
+                ? 'Take Topic Quiz'
+                : 'Start Learning'
+            }
+            onPress={handleStartLearning}
+          />
         </View>
       </ScrollView>
     </SafeAreaView>

@@ -13,7 +13,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { subjectService } from '@/services/subject.service';
 import { subscriptionService } from '@/services/subscription.service';
+import { quizService } from '@/services/quiz.service';
+import { authService } from '@/services/auth.service';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import ResponseMessageModal from '@/components/ui/ResponseMessageModal';
 
 export interface CurriculumItem {
   id: string; // e.g. "01", "02"
@@ -24,6 +27,8 @@ export interface CurriculumItem {
   isLocked: boolean;
   topicId?: string;
   duration?: string;
+  lockReason?: 'subscription_required' | 'quiz_required';
+  requiredQuizTopicTitle?: string;
 }
 
 export default function SubjectDetailsScreen() {
@@ -37,15 +42,33 @@ export default function SubjectDetailsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasSubscription, setHasSubscription] = useState(false);
 
+  // Modal alert for locked topics
+  const [lockModal, setLockModal] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    type: 'warning' | 'info';
+    primaryText?: string;
+    targetTopicId?: string;
+    action?: 'subscribe' | 'take_quiz';
+  }>({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info',
+  });
+
   useEffect(() => {
     const fetchSubjectDetails = async () => {
       if (!subjectId) return;
 
       try {
         setIsLoading(true);
-        const [subStatus, data] = await Promise.all([
+        const [subStatus, data, quizResults, userProfile] = await Promise.all([
           subscriptionService.getMyActiveSubscription().catch(() => null),
           subjectService.getSubjectById(subjectId),
+          quizService.getUserResults().catch(() => []),
+          authService.getProfile().catch(() => null),
         ]);
 
         const isSubscribed =
@@ -53,62 +76,97 @@ export default function SubjectDetailsScreen() {
           (subStatus.status === 'active' || subStatus.status === 'grace');
         setHasSubscription(isSubscribed);
 
-        const topics = data?.topics || [];
-        const flattenedItems: CurriculumItem[] = [];
+        // Build set of topics whose quiz has been completed/passed
+        const completedTopicIds = new Set<string>();
 
-        // Check if topics exist and if any topic has lessons
-        topics.forEach((topic: any) => {
-          const lessons = topic.lessons || [];
-          if (lessons.length > 0) {
-            lessons.forEach((l: any) => {
-              flattenedItems.push({
-                id: '',
-                _id: l._id,
-                title: l.title,
-                subtitle: l.format || (l.audioUrl ? 'TTS Audio & Text' : 'Text Lesson'),
-                status: 'locked',
-                isLocked: true,
-                topicId: topic._id,
-                duration: l.duration || '10 mins',
-              });
-            });
-          } else {
-            flattenedItems.push({
-              id: '',
-              _id: topic._id,
-              title: topic.title,
-              subtitle: 'Curriculum Topic',
-              status: 'locked',
-              isLocked: true,
-              topicId: topic._id,
-            });
-          }
-        });
+        // 1. From user quiz results (passed quizzes)
+        if (Array.isArray(quizResults)) {
+          quizResults.forEach((r: any) => {
+            if (r.passed) {
+              const quizTopicId = r.quiz?.topic?._id || r.quiz?.topic;
+              if (quizTopicId) completedTopicIds.add(quizTopicId.toString());
+            }
+          });
+        }
 
-        // Set index numbering and sequential lock/unlock status
-        const mappedList: CurriculumItem[] = flattenedItems.map((item, idx) => {
+        // 2. From user profile attended/completed topics
+        if (userProfile?.attendedTopics && Array.isArray(userProfile.attendedTopics)) {
+          userProfile.attendedTopics.forEach((tId: string) => {
+            if (tId) completedTopicIds.add(tId.toString());
+          });
+        }
+
+        const rawTopics = data?.topics || [];
+
+        // Map topic items with strict quiz-gated progression
+        let previousTopicCompleted = true; // First topic is always unlocked to study
+        let activeFound = false;
+
+        const mappedList: CurriculumItem[] = rawTopics.map((topic: any, idx: number) => {
           const numStr = (idx + 1).toString().padStart(2, '0');
-          let status: 'active' | 'completed' | 'locked' = 'locked';
-          let isLocked = idx > 0;
+          const topicIdStr = (topic._id || '').toString();
+          const isTopicQuizPassed = completedTopicIds.has(topicIdStr);
 
-          if (idx === 0) {
-            status = 'active';
-            isLocked = false;
-          } else {
-            status = isSubscribed ? 'completed' : 'locked';
-            isLocked = !isSubscribed;
+          let isLocked = false;
+          let lockReason: 'subscription_required' | 'quiz_required' | undefined = undefined;
+          let requiredQuizTopicTitle: string | undefined = undefined;
+
+          // Topic 0: Free complimentary topic.
+          // Topic > 0: Requires subscription AND completion of previous topic's quiz.
+          if (idx > 0 && !isSubscribed) {
+            isLocked = true;
+            lockReason = 'subscription_required';
+          } else if (idx > 0 && !previousTopicCompleted) {
+            isLocked = true;
+            lockReason = 'quiz_required';
+            const prevTopic = rawTopics[idx - 1];
+            requiredQuizTopicTitle = prevTopic?.title || `Topic ${(idx).toString().padStart(2, '0')}`;
           }
+
+          let status: 'active' | 'completed' | 'locked' = 'locked';
+          if (isTopicQuizPassed) {
+            status = 'completed';
+          } else if (!isLocked && !activeFound) {
+            status = 'active';
+            activeFound = true;
+          } else if (isLocked) {
+            status = 'locked';
+          } else {
+            status = 'active';
+          }
+
+          // Update progression tracker for the next topic in list
+          previousTopicCompleted = isTopicQuizPassed;
+
+          const lessons = topic.lessons || [];
+          const subtitle = lessons.length > 0
+            ? `${lessons.length} lesson${lessons.length === 1 ? '' : 's'} • Assessment`
+            : 'Curriculum Topic';
 
           return {
-            ...item,
             id: numStr,
+            _id: topic._id,
+            title: topic.title,
+            subtitle,
             status,
             isLocked,
+            topicId: topic._id,
+            duration: `${lessons.length * 10 || 15} mins`,
+            lockReason,
+            requiredQuizTopicTitle,
           };
         });
 
+        // Calculate actual completion progress
+        const completedCount = mappedList.filter((item) => item.status === 'completed').length;
+        const totalCount = Math.max(mappedList.length, 1);
+        const calculatedProgress = Math.min(
+          100,
+          Math.max(0, Math.round((completedCount / totalCount) * 100)),
+        );
+
         setItems(mappedList);
-        setProgress(Math.min(100, Math.max(0, data?.progress || (isSubscribed ? 45 : 10))));
+        setProgress(calculatedProgress || (isSubscribed ? 30 : 10));
       } catch (err) {
         console.warn('Failed to fetch subject curriculum details:', err);
         setItems([]);
@@ -122,27 +180,41 @@ export default function SubjectDetailsScreen() {
 
   const handleItemPress = (item: CurriculumItem) => {
     if (item.isLocked) {
+      if (item.lockReason === 'quiz_required') {
+        setLockModal({
+          visible: true,
+          type: 'warning',
+          title: 'Quiz Required',
+          message: `You must complete and submit the quiz for "${item.requiredQuizTopicTitle || 'the previous topic'}" before unlocking this topic.`,
+          primaryText: 'Take Previous Quiz',
+          action: 'take_quiz',
+          targetTopicId: items.find((i) => i.title === item.requiredQuizTopicTitle)?.topicId,
+        });
+        return;
+      }
+
+      // Subscription required
       router.push('/premium-access');
       return;
     }
 
+    // Direct into topic details page for lessons and quiz
     router.push({
-      pathname: '/lesson',
+      pathname: '/topic-details',
       params: {
-        id: item._id,
-        title: item.title,
-        subject: `${subjectName} > ${item.title}`,
-        topicId: item.topicId || '',
+        topicId: item.topicId || item._id,
+        topicTitle: item.title,
+        subjectName: subjectName,
       },
     });
   };
 
   const handleContinueLearning = () => {
-    const activeItem = items.find((i) => !i.isLocked) || items[0];
+    const activeItem = items.find((i) => i.status === 'active' && !i.isLocked) || items[0];
     if (activeItem) {
       handleItemPress(activeItem);
     } else {
-      router.push('/lesson');
+      router.push('/(tabs)/subjects');
     }
   };
 
@@ -269,24 +341,66 @@ export default function SubjectDetailsScreen() {
                 >
                   <View style={styles.unitLeft}>
                     <Text style={[styles.unitNumberTextLocked, { color: colors.textMuted }]}>{item.id}</Text>
-                    <View style={{ marginLeft: 20 }}>
-                      <Text style={[styles.unitTitleLocked, { color: colors.textSecondary }]}>{item.title}</Text>
-                      <Text style={[styles.unitSubtitleLocked, { color: colors.textMuted }]}>
-                        {item.isLocked ? 'Locked Lesson' : item.subtitle}
+                    <View style={{ marginLeft: 20, flex: 1, marginRight: 8 }}>
+                      <Text style={[styles.unitTitleLocked, { color: item.status === 'completed' ? colors.text : colors.textSecondary }]}>
+                        {item.title}
                       </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                        <Text style={[styles.unitSubtitleLocked, { color: colors.textMuted }]}>
+                          {item.lockReason === 'quiz_required'
+                            ? `Take Quiz: ${item.requiredQuizTopicTitle}`
+                            : item.isLocked
+                            ? 'Subscribe to Unlock'
+                            : item.status === 'completed'
+                            ? 'Completed • Quiz Passed'
+                            : item.subtitle}
+                        </Text>
+                      </View>
                     </View>
                   </View>
-                  <Ionicons
-                    name={item.isLocked ? 'lock-closed-outline' : 'chevron-forward'}
-                    size={20}
-                    color={colors.textMuted}
-                  />
+                  {item.status === 'completed' ? (
+                    <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.successBg, alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="checkmark" size={16} color={colors.success} />
+                    </View>
+                  ) : (
+                    <Ionicons
+                      name={item.isLocked ? 'lock-closed-outline' : 'chevron-forward'}
+                      size={20}
+                      color={item.lockReason === 'quiz_required' ? colors.warning : colors.textMuted}
+                    />
+                  )}
                 </TouchableOpacity>
               );
             })}
           </View>
         )}
       </ScrollView>
+
+      {/* Lock / Quiz Gate Dialog Modal */}
+      <ResponseMessageModal
+        visible={lockModal.visible}
+        type={lockModal.type}
+        title={lockModal.title}
+        message={lockModal.message}
+        primaryButtonText={lockModal.primaryText || 'OK'}
+        secondaryButtonText="Dismiss"
+        timeoutMs={0}
+        showProgressBar={false}
+        onPrimaryPress={() => {
+          setLockModal((prev) => ({ ...prev, visible: false }));
+          if (lockModal.action === 'take_quiz' && lockModal.targetTopicId) {
+            router.push({
+              pathname: '/topic-details',
+              params: {
+                topicId: lockModal.targetTopicId,
+                subjectName,
+              },
+            });
+          }
+        }}
+        onSecondaryPress={() => setLockModal((prev) => ({ ...prev, visible: false }))}
+        onClose={() => setLockModal((prev) => ({ ...prev, visible: false }))}
+      />
     </SafeAreaView>
   );
 }

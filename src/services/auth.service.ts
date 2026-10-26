@@ -11,6 +11,9 @@ export interface User {
   class?: string;
   school?: string;
   avatar?: string;
+  attendedTopics?: string[];
+  completedLessons?: string[];
+  freeTrialUsed?: boolean;
 }
 
 export interface AuthResponse {
@@ -102,6 +105,15 @@ export const authService = {
   async changePassword(data: { currentPassword: string; newPassword: string }): Promise<{ message: string }> {
     const response = await api.post<{ message: string }>('/auth/change-password', data);
     return response.data;
+  },
+
+  async getProfile(): Promise<User> {
+    const response = await api.get<User>('/auth/profile');
+    const user = response.data;
+    if (user) {
+      await storageService.setUser(user);
+    }
+    return user;
   },
 
   async updateProfile(data: Partial<User>): Promise<{ message: string; user: User }> {

@@ -5,7 +5,6 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
 import InputField from '@/components/ui/InputField';
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import ResponseMessageModal from '@/components/ui/ResponseMessageModal';
@@ -41,6 +40,25 @@ export default function EditProfileScreen() {
 
   const handlePickImage = async () => {
     try {
+      let ImagePicker: any;
+      try {
+        ImagePicker = await import('expo-image-picker');
+      } catch (err: any) {
+        showError(
+          'Image Picker Unavailable',
+          'Native image picker module is not linked in your current build. Please rebuild your development build (npx expo run:android).'
+        );
+        return;
+      }
+
+      if (!ImagePicker || typeof ImagePicker.launchImageLibraryAsync !== 'function') {
+        showError(
+          'Image Picker Unavailable',
+          'Image picker is not available on this device build.'
+        );
+        return;
+      }
+
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permissionResult.granted) {
         showError('Permission Required', 'Camera roll permissions are required to select a profile photo.');

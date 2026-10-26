@@ -156,9 +156,10 @@ export default function LessonScreen() {
       Alert.alert('Audio Notice', 'No audio or lesson text is available to play.');
     } catch (err: any) {
       console.error('Audio playback/synthesis error:', err);
+      const detail = err?.message || 'Could not stream audio narration at the moment.';
       Alert.alert(
         'Audio Notice',
-        'Could not stream audio narration at the moment. Please check your internet connection.'
+        `${detail} Please verify your server connection.`
       );
     } finally {
       setIsSynthesizing(false);

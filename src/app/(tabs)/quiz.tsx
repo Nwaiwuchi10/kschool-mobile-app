@@ -50,12 +50,23 @@ export default function QuizScreen() {
         } else if (params.lessonId) {
           const quizzes = await quizService.getQuizzesByLesson(params.lessonId);
           if (quizzes && quizzes.length > 0) {
-            q = quizzes[0];
+            // Aggregate all questions across exercises for this lesson if multiple exist
+            const allQuestions = quizzes.flatMap((quizItem) => quizItem.questions || []);
+            q = {
+              ...quizzes[0],
+              title: params.title || quizzes[0].title || 'Lesson Assessment',
+              questions: allQuestions.length > 0 ? allQuestions : (quizzes[0].questions || []),
+            };
           }
         } else if (params.topicId) {
           const quizzes = await quizService.getQuizzesByTopic(params.topicId);
           if (quizzes && quizzes.length > 0) {
-            q = quizzes[0];
+            const allQuestions = quizzes.flatMap((quizItem) => quizItem.questions || []);
+            q = {
+              ...quizzes[0],
+              title: params.title || quizzes[0].title || 'Topic Quiz',
+              questions: allQuestions.length > 0 ? allQuestions : (quizzes[0].questions || []),
+            };
           }
         }
 

@@ -325,28 +325,38 @@ export const MathView: React.FC<MathViewProps> = ({
     }
 
     function sendHeight() {
-      const h = Math.max(
-        document.body.scrollHeight || 0,
-        document.documentElement.scrollHeight || 0,
-        document.getElementById('content-container')?.offsetHeight || 0,
-        30
+      const containerEl = document.getElementById('content-container');
+      const rectHeight = containerEl ? Math.ceil(containerEl.getBoundingClientRect().height) : 0;
+      const scrollH = Math.max(
+        document.body ? document.body.scrollHeight : 0,
+        document.documentElement ? document.documentElement.scrollHeight : 0,
+        rectHeight
       );
+      const finalH = Math.max(scrollH, rectHeight, 20);
       if (window.ReactNativeWebView) {
-        window.ReactNativeWebView.postMessage(JSON.stringify({ height: h }));
+        window.ReactNativeWebView.postMessage(JSON.stringify({ height: finalH }));
       }
     }
 
-    // Measure height on initial load and after potential image/font rendering
+    // Measure height on initial load and progressively after fonts/images render
     sendHeight();
-    setTimeout(sendHeight, 60);
-    setTimeout(sendHeight, 180);
-    setTimeout(sendHeight, 500);
+    setTimeout(sendHeight, 50);
+    setTimeout(sendHeight, 150);
+    setTimeout(sendHeight, 350);
+    setTimeout(sendHeight, 700);
     setTimeout(sendHeight, 1200);
+    setTimeout(sendHeight, 2500);
 
-    // Watch for dynamic DOM changes (e.g. image loads)
+    // Watch for dynamic DOM and image changes
     window.addEventListener('load', sendHeight);
+    if (window.ResizeObserver) {
+      const resizeObserver = new ResizeObserver(() => sendHeight());
+      const c = document.getElementById('content-container');
+      if (c) resizeObserver.observe(c);
+      if (document.body) resizeObserver.observe(document.body);
+    }
     const observer = new MutationObserver(sendHeight);
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+    observer.observe(document.body || document.documentElement, { childList: true, subtree: true, attributes: true });
   </script>
 </body>
 </html>
@@ -369,7 +379,7 @@ export const MathView: React.FC<MathViewProps> = ({
             if (data?.type === 'open_url' && data.url) {
               Linking.openURL(data.url).catch(() => {});
             } else if (data?.height && data.height > 10) {
-              setWebViewHeight(Math.ceil(data.height) + 14);
+              setWebViewHeight(Math.ceil(data.height) + 8);
             }
           } catch (e) {
             // Ignore parse errors
