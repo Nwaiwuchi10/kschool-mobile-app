@@ -185,15 +185,9 @@ export default function LessonScreen() {
       try {
         if (typeof (player as any).setPlaybackRate === 'function') {
           (player as any).setPlaybackRate(newSpeed);
-        } else if ('playbackRate' in player) {
-          try {
-            (player as any).playbackRate = newSpeed;
-          } catch (e) {
-            // Getter-only in current expo-audio version
-          }
         }
       } catch (e) {
-        console.warn('Error setting audio speed:', e);
+        console.warn('Error setting audio playback speed:', e);
       }
     }
   };
