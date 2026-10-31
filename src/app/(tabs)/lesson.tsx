@@ -954,21 +954,27 @@ export default function LessonScreen() {
         animationType="fade"
         onRequestClose={() => setShowVoiceModal(false)}
       >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowVoiceModal(false)}
-        >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setShowVoiceModal(false)}
+          />
           <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
-              <View>
+              <View style={{ flex: 1, paddingRight: 10 }}>
                 <Text style={[styles.modalTitle, { color: colors.text }]}>Choose Preferred Voice</Text>
                 <Text style={[styles.modalSub, { color: colors.textSecondary }]}>
                   Select your preferred voice for lesson audio narration
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setShowVoiceModal(false)} style={{ padding: 4 }}>
-                <Ionicons name="close" size={24} color={colors.textSecondary} />
+              <TouchableOpacity
+                onPress={() => setShowVoiceModal(false)}
+                style={[styles.modalCloseBtn, { backgroundColor: colors.surfaceAlt }]}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={20} color={colors.text} />
               </TouchableOpacity>
             </View>
 
@@ -1005,7 +1011,7 @@ export default function LessonScreen() {
               })}
             </ScrollView>
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -1124,12 +1130,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 20,
     maxHeight: '80%',
+    zIndex: 1,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 16,
+  },
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   modalTitle: {
     fontSize: 18,
