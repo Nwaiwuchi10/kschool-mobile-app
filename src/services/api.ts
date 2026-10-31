@@ -6,8 +6,10 @@ import { storageService } from './storage.service';
 export const getApiBaseUrl = (): string => {
   // During local development (emulator/simulator/Metro), prioritize local backend on port 3500
   if (__DEV__) {
-    const localHost = Platform.OS === 'android' ? '192.168.0.106' : 'localhost';
-    const localUrl = `http://${localHost}:3500`;
+    const localHost = Platform.OS === 'android' ? 'https://kschool-backend.vercel.app' : 'https://kschool-backend.vercel.app'
+    // '192.168.0.106' : 'localhost';
+    const localUrl = 'https://kschool-backend.vercel.app'
+    // `http://${localHost}:3500`;
     console.log(`[API DEV] Connecting to local Backend at: ${localUrl}`);
     return localUrl;
   }
@@ -17,7 +19,8 @@ export const getApiBaseUrl = (): string => {
     return process.env.EXPO_PUBLIC_API_URL;
   }
 
-  return 'http://192.168.0.106:3500';
+  return 'https://kschool-backend.vercel.app'
+  // 'http://192.168.0.106:3500';
 };
 
 export const api = axios.create({
