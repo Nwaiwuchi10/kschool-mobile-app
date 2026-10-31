@@ -244,7 +244,16 @@ export default function LessonScreen() {
       // Synthesize on-the-fly using the student's selected voice
       if (lessonContent || lessonTitle) {
         setIsSynthesizing(true);
-        const textToSpeak = `${lessonTitle}. ${lessonContent.replace(/<[^>]+>/g, ' ').slice(0, 1500)}`;
+        // Clean markdown and HTML tags, preserve full content from beginning to end
+        const cleanContent = lessonContent
+          ? lessonContent
+              .replace(/<[^>]+>/g, ' ')
+              .replace(/```[\s\S]*?```/g, ' ')
+              .replace(/[#*`_~>]/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim()
+          : '';
+        const textToSpeak = `${lessonTitle}. ${cleanContent}`;
         const res = await lessonService.synthesizeSpeech(textToSpeak, voiceToUse.id);
         if (res && res.audioUrl) {
           setTtsAudioUrl(res.audioUrl);
