@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import { useClass } from '@/store/ClassContext';
 import { subscriptionService, SubscriptionPackage } from '@/services/subscription.service';
@@ -11,12 +11,25 @@ import { useAppTheme } from '@/hooks/useAppTheme';
 
 export default function ChoosePlanScreen() {
   const { colors, isDark } = useAppTheme();
-  const { selectedClass } = useClass();
-  const currentClass = selectedClass || 'JSS 1';
+  const params = useLocalSearchParams<{
+    topicId?: string;
+    topicTitle?: string;
+    subjectId?: string;
+    subjectName?: string;
+  }>();
+  const { classes, selectedClass, paidClasses, selectClass } = useClass();
+  const [targetClass, setTargetClass] = useState<string>(selectedClass || 'JSS 1');
+  const currentClass = targetClass || selectedClass || 'JSS 1';
 
   const [packages, setPackages] = useState<SubscriptionPackage[]>([]);
   const [selectedPkg, setSelectedPkg] = useState<SubscriptionPackage | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (selectedClass) {
+      setTargetClass(selectedClass);
+    }
+  }, [selectedClass]);
 
   useEffect(() => {
     const loadPackages = async () => {
@@ -25,9 +38,8 @@ export default function ChoosePlanScreen() {
         const data = await subscriptionService.getPackages();
         if (data && data.length > 0) {
           setPackages(data);
-          // Match current class package or default to first
-          const matched = data.find((p) => p.name.includes(currentClass)) || data[0];
-          setSelectedPkg(matched);
+          // Use the general subscription plan created by Admin
+          setSelectedPkg(data[0]);
         }
       } catch (err) {
         console.warn('Error loading packages:', err);
@@ -36,23 +48,30 @@ export default function ChoosePlanScreen() {
       }
     };
     loadPackages();
-  }, [currentClass]);
+  }, []);
 
-  const packageName = selectedPkg?.name || `${currentClass} Learning Package`;
-  const sessionName = selectedPkg?.academicSession || '2026/2027 Academic Session';
+  const packageName = selectedPkg?.name || 'Annual Learning Subscription Plan';
+  const sessionName = `${selectedPkg?.academicSession || '2026/2027'} • 1-Year Access for ${currentClass}`;
   const priceDisplay = selectedPkg?.price
     ? `₦${Number(selectedPkg.price).toLocaleString()}`
-    : '₦0';
+    : '₦25,000';
 
-  const handleContinue = () => {
-    if (!selectedPkg) return;
+  const handleContinue = async () => {
+    if (targetClass && targetClass !== selectedClass) {
+      await selectClass(targetClass).catch(() => {});
+    }
     router.push({
       pathname: '/payment-summary',
       params: {
-        packageId: selectedPkg._id,
+        packageId: selectedPkg?._id || 'default',
         packageName,
-        academicSession: selectedPkg.academicSession || '2026/2027',
-        price: selectedPkg.price.toString(),
+        academicSession: selectedPkg?.academicSession || '2026/2027',
+        price: (selectedPkg?.price || 25000).toString(),
+        classLevel: currentClass,
+        topicId: params.topicId,
+        topicTitle: params.topicTitle,
+        subjectId: params.subjectId,
+        subjectName: params.subjectName,
       },
     });
   };
@@ -75,8 +94,55 @@ export default function ChoosePlanScreen() {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <Text style={[styles.title, { color: colors.text }]}>Learn without limits</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          One simple package for a complete academic session.
+          Each subscription is attached to your selected class. You can also select another class below to subscribe for it.
         </Text>
+
+        {/* Class Selector Strip so student can pay for their class or another class */}
+        <View style={{ marginBottom: 20 }}>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textSecondary, marginBottom: 8 }}>
+            Select Class for Subscription
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            {classes.map((cls) => {
+              const isSelected = currentClass.toLowerCase() === cls.name.toLowerCase();
+              const isPaid = paidClasses.some((pc) => pc.toLowerCase() === cls.name.toLowerCase());
+              return (
+                <TouchableOpacity
+                  key={cls._id || cls.name}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                    paddingHorizontal: 14,
+                    paddingVertical: 8,
+                    borderRadius: 16,
+                    backgroundColor: isSelected ? colors.primary : colors.surface,
+                    borderWidth: 1,
+                    borderColor: isSelected ? colors.primary : colors.border,
+                  }}
+                  onPress={() => setTargetClass(cls.name)}
+                >
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: '700',
+                      color: isSelected ? '#FFFFFF' : colors.text,
+                    }}
+                  >
+                    {cls.name}
+                  </Text>
+                  {isPaid && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={14}
+                      color={isSelected ? '#FFFFFF' : colors.primary}
+                    />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
 
         {isLoading ? (
           <View style={styles.loadingBox}>
@@ -111,7 +177,9 @@ export default function ChoosePlanScreen() {
             </View>
 
             <Text style={[styles.priceValue, { color: colors.primary }]}>{priceDisplay}</Text>
-            <Text style={[styles.pricePeriod, { color: colors.textSecondary }]}>per Academic Session</Text>
+            <Text style={[styles.pricePeriod, { color: colors.textSecondary }]}>
+              for 1 Year ({currentClass} Curriculum Access)
+            </Text>
           </View>
         )}
       </ScrollView>

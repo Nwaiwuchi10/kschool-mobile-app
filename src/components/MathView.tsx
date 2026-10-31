@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, Platform, Linking } from 'react-native';
 import { WebView } from 'react-native-webview';
+import { formatMarkdownForMobile } from '@/utils/formatMarkdown';
 
 interface MathViewProps {
   content: string;
@@ -13,7 +14,8 @@ interface MathViewProps {
 
 /**
  * Universal Mobile Lesson & Rich Media Content Renderer.
- * Responsively renders full WordPress Editor content:
+ * Responsively renders full Markdown & WordPress Editor content:
+ * - Markdown syntax (# headings, bullet points, numbers, bold, tables)
  * - Rich HTML typography (headings h1-h6, paragraphs, formatted text, highlights)
  * - Clickable links (<a href="...">) that open in browser
  * - Cloudinary images & inline image cards (responsive, rounded, shadow)
@@ -32,46 +34,12 @@ export const MathView: React.FC<MathViewProps> = ({
 }) => {
   const [webViewHeight, setWebViewHeight] = useState(inline ? 28 : 120);
 
+  // Transform Markdown to rich HTML
+  const formattedHtml = useMemo(() => {
+    return formatMarkdownForMobile(content || '');
+  }, [content]);
+
   if (!content) return null;
-
-  // Check if content contains HTML tags
-  const hasHtml = /<\/?[a-z][\s\S]*>/i.test(content);
-
-  // Check if content has LaTeX math delimiters or formula tags
-  const hasLatex =
-    content.includes('$') ||
-    content.includes('\\frac') ||
-    content.includes('\\sqrt') ||
-    content.includes('\\times') ||
-    content.includes('\\text') ||
-    content.includes('\\sum') ||
-    content.includes('\\pm');
-
-  // If completely plain text (no HTML and no LaTeX), render formatted native paragraphs
-  if (!hasHtml && !hasLatex) {
-    const paragraphs = content.split(/\n\s*\n/).filter((p) => p.trim().length > 0);
-    return (
-      <View style={style}>
-        {paragraphs.map((p, pIdx) => (
-          <Text
-            key={pIdx}
-            style={[
-              {
-                fontSize,
-                color,
-                lineHeight: Math.round(fontSize * 1.55),
-                letterSpacing: 0.15,
-                marginBottom: pIdx === paragraphs.length - 1 ? 0 : 16,
-              },
-              textStyle,
-            ]}
-          >
-            {p.trim()}
-          </Text>
-        ))}
-      </View>
-    );
-  }
 
   // On Web platform (react-native-web)
   if (Platform.OS === 'web') {
@@ -79,13 +47,13 @@ export const MathView: React.FC<MathViewProps> = ({
       <View
         style={[styles.container, style]}
         // @ts-ignore
-        dangerouslySetInnerHTML={{ __html: content }}
+        dangerouslySetInnerHTML={{ __html: formattedHtml }}
       />
     );
   }
 
   // Safe JSON encoding of the HTML/LaTeX string to prevent script injection breaks
-  const encodedContent = JSON.stringify(content);
+  const encodedContent = JSON.stringify(formattedHtml);
 
   const htmlDocument = `
 <!DOCTYPE html>

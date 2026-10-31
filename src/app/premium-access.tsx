@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import { useClass } from '@/store/ClassContext';
 import { subscriptionService, SubscriptionPackage } from '@/services/subscription.service';
@@ -11,12 +11,25 @@ import { useAppTheme } from '@/hooks/useAppTheme';
 
 export default function PremiumAccessScreen() {
   const { colors, isDark } = useAppTheme();
-  const { selectedClass } = useClass();
-  const currentClass = selectedClass || 'JSS 1';
+  const params = useLocalSearchParams<{
+    topicId?: string;
+    topicTitle?: string;
+    subjectId?: string;
+    subjectName?: string;
+  }>();
+  const { classes, selectedClass, paidClasses, selectClass } = useClass();
+  const [targetClass, setTargetClass] = useState<string>(selectedClass || 'JSS 1');
+  const currentClass = targetClass || selectedClass || 'JSS 1';
 
   const [packages, setPackages] = useState<SubscriptionPackage[]>([]);
   const [selectedPkg, setSelectedPkg] = useState<SubscriptionPackage | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (selectedClass) {
+      setTargetClass(selectedClass);
+    }
+  }, [selectedClass]);
 
   useEffect(() => {
     let isMounted = true;
@@ -26,8 +39,8 @@ export default function PremiumAccessScreen() {
         const data = await subscriptionService.getPackages();
         if (isMounted && data && data.length > 0) {
           setPackages(data);
-          const matched = data.find((p) => p.name.includes(currentClass)) || data[0];
-          setSelectedPkg(matched);
+          // Use the general subscription plan created by Admin
+          setSelectedPkg(data[0]);
         }
       } catch (err) {
         console.warn('Error fetching packages for premium access:', err);
@@ -39,24 +52,31 @@ export default function PremiumAccessScreen() {
     return () => {
       isMounted = false;
     };
-  }, [currentClass]);
+  }, []);
 
-  const handleSubscribe = () => {
-    if (!selectedPkg) return;
+  const packageName = selectedPkg?.name || 'Annual Learning Subscription Plan';
+  const academicSession = `${selectedPkg?.academicSession || '2026/2027'} • 1-Year Subscription for ${currentClass}`;
+  const priceDisplay = selectedPkg?.price ? `₦${selectedPkg.price.toLocaleString()}` : '₦25,000';
+
+  const handleSubscribe = async () => {
+    if (targetClass && targetClass !== selectedClass) {
+      await selectClass(targetClass).catch(() => {});
+    }
     router.push({
       pathname: '/payment-summary',
       params: {
-        packageId: selectedPkg._id,
-        packageName: selectedPkg.name,
-        academicSession: selectedPkg.academicSession || '2026/2027',
-        price: selectedPkg.price.toString(),
+        packageId: selectedPkg?._id || 'default',
+        packageName,
+        academicSession: selectedPkg?.academicSession || '2026/2027',
+        price: (selectedPkg?.price || 25000).toString(),
+        classLevel: currentClass,
+        topicId: params.topicId,
+        topicTitle: params.topicTitle,
+        subjectId: params.subjectId,
+        subjectName: params.subjectName,
       },
     });
   };
-
-  const packageName = selectedPkg?.name || `${currentClass} Learning Package`;
-  const academicSession = selectedPkg?.academicSession || 'Full Session Subscription';
-  const priceDisplay = selectedPkg?.price ? `₦${selectedPkg.price.toLocaleString()}` : '₦0';
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -83,8 +103,55 @@ export default function PremiumAccessScreen() {
 
         <Text style={[styles.title, { color: colors.text }]}>Ready to Keep Learning?</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          You have enjoyed your complimentary first lesson and exercise! Subscribe to unlock all lessons, subjects, and practice quizzes for {currentClass}.
+          You have enjoyed your complimentary first lesson and quiz exercise! Subscribe for {currentClass} (or select another class below) to unlock all remaining lessons, subjects, and quizzes.
         </Text>
+
+        {/* Class Selector Strip so student can subscribe for their class or another class */}
+        <View style={{ width: '100%', marginBottom: 20 }}>
+          <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginBottom: 8 }}>
+            SELECT CLASS TO SUBSCRIBE
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            {classes.map((cls) => {
+              const isSelected = currentClass.toLowerCase() === cls.name.toLowerCase();
+              const isPaid = paidClasses.some((pc) => pc.toLowerCase() === cls.name.toLowerCase());
+              return (
+                <TouchableOpacity
+                  key={cls._id || cls.name}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                    paddingHorizontal: 14,
+                    paddingVertical: 8,
+                    borderRadius: 16,
+                    backgroundColor: isSelected ? colors.primary : colors.surface,
+                    borderWidth: 1,
+                    borderColor: isSelected ? colors.primary : colors.border,
+                  }}
+                  onPress={() => setTargetClass(cls.name)}
+                >
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: '700',
+                      color: isSelected ? '#FFFFFF' : colors.text,
+                    }}
+                  >
+                    {cls.name}
+                  </Text>
+                  {isPaid && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={14}
+                      color={isSelected ? '#FFFFFF' : colors.primary}
+                    />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
 
         {isLoading ? (
           <View style={{ paddingVertical: 40, alignItems: 'center' }}>
@@ -127,7 +194,9 @@ export default function PremiumAccessScreen() {
 
             <View style={styles.priceContainer}>
               <Text style={[styles.priceAmount, { color: colors.primary }]}>{priceDisplay}</Text>
-              <Text style={[styles.pricePeriod, { color: colors.textSecondary }]}>/ Academic Session</Text>
+              <Text style={[styles.pricePeriod, { color: colors.textSecondary }]}>
+                / 1 Year ({currentClass})
+              </Text>
             </View>
           </View>
         )}
@@ -135,7 +204,7 @@ export default function PremiumAccessScreen() {
 
       {/* Footer */}
       <View style={styles.footer}>
-        <PrimaryButton title="Subscribe with Paystack" onPress={handleSubscribe} disabled={isLoading || !selectedPkg} />
+        <PrimaryButton title={`Subscribe for ${currentClass} with Paystack`} onPress={handleSubscribe} disabled={isLoading} />
         <Text style={[styles.footerText, { color: colors.textMuted }]}>Secure payment powered by Paystack</Text>
       </View>
     </SafeAreaView>

@@ -12,8 +12,8 @@ import { useAppTheme } from '@/hooks/useAppTheme';
 
 export default function SelectClassScreen() {
   const { colors, isDark } = useAppTheme();
-  const { classes, selectedClass, paidClass, isClassLocked, isLoadingClasses, selectClass } = useClass();
-  const { modalConfig, showError, showWarning, hideModal } = useResponseModal();
+  const { classes, selectedClass, paidClass, paidClasses, isLoadingClasses, selectClass } = useClass();
+  const { modalConfig, showError, hideModal } = useResponseModal();
   
   const [currentSelected, setCurrentSelected] = useState<string>(selectedClass || 'JSS 1');
   const [isLoading, setIsLoading] = useState(false);
@@ -25,15 +25,6 @@ export default function SelectClassScreen() {
   }, [selectedClass]);
 
   const handleClassPress = (className: string) => {
-    if (isClassLocked && paidClass && paidClass.toLowerCase() !== className.toLowerCase()) {
-      showWarning(
-        'Subscribed Class Locked',
-        `You have an active paid subscription for ${paidClass}. In accordance with your academic enrollment, your learning content is locked to this class for the session.`,
-        undefined,
-        'Understood'
-      );
-      return;
-    }
     setCurrentSelected(className);
   };
 
@@ -77,12 +68,16 @@ export default function SelectClassScreen() {
           Select your current curriculum class level
         </Text>
 
-        {/* Locked Class Notice Banner */}
-        {isClassLocked && paidClass ? (
+        {/* Subscribed Classes Notice Banner */}
+        {(paidClasses && paidClasses.length > 0) || paidClass ? (
           <View style={[styles.lockedBanner, { backgroundColor: colors.cardHighlightBg, borderColor: colors.cardHighlightBorder }]}>
-            <Ionicons name="lock-closed" size={18} color={colors.primary} />
-            <Text style={[styles.lockedBannerText, { color: colors.primary }]}>
-              Enrolled in <Text style={{ fontWeight: '800' }}>{paidClass}</Text> (Active Subscription)
+            <Ionicons name="shield-checkmark" size={18} color={colors.primary} />
+            <Text style={[styles.lockedBannerText, { color: colors.primary, flex: 1 }]}>
+              Active Subscription:{' '}
+              <Text style={{ fontWeight: '800' }}>
+                {paidClasses && paidClasses.length > 0 ? paidClasses.join(', ') : paidClass}
+              </Text>
+              . You can also select and subscribe for another class.
             </Text>
           </View>
         ) : null}
@@ -97,7 +92,9 @@ export default function SelectClassScreen() {
           <ScrollView contentContainerStyle={styles.gridContainer} showsVerticalScrollIndicator={false}>
             {classes.map((cls) => {
               const isSelected = currentSelected === cls.name;
-              const isUserPaidClass = paidClass && paidClass.toLowerCase() === cls.name.toLowerCase();
+              const isUserPaidClass =
+                (paidClasses && paidClasses.some((pc) => pc.toLowerCase() === cls.name.toLowerCase())) ||
+                (paidClass && paidClass.toLowerCase() === cls.name.toLowerCase());
 
               return (
                 <TouchableOpacity
@@ -133,10 +130,39 @@ export default function SelectClassScreen() {
         {/* Actions */}
         <View style={styles.actionsContainer}>
           <PrimaryButton 
-            title="Continue" 
+            title={`Continue with ${currentSelected}`} 
             loading={isLoading}
             onPress={handleContinue} 
           />
+          {!((paidClasses && paidClasses.some((pc) => pc.toLowerCase() === currentSelected.toLowerCase())) ||
+            (paidClass && paidClass.toLowerCase() === currentSelected.toLowerCase())) && (
+            <TouchableOpacity
+              style={{
+                marginTop: 12,
+                height: 48,
+                borderRadius: 24,
+                borderWidth: 1.5,
+                borderColor: colors.primary,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+              onPress={async () => {
+                try {
+                  setIsLoading(true);
+                  await selectClass(currentSelected);
+                  router.push('/choose-plan');
+                } catch (err: any) {
+                  showError('Selection Error', err.message || 'Failed to select class.');
+                } finally {
+                  setIsLoading(false);
+                }
+              }}
+            >
+              <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '700' }}>
+                Subscribe for {currentSelected} (1 Year)
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 

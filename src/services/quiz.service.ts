@@ -33,10 +33,11 @@ export const quizService = {
   },
 
   /**
-   * Get quizzes for a topic
+   * Get quizzes for a topic, optionally filtered by subject name
    */
-  async getQuizzesByTopic(topicId: string): Promise<MobileQuiz[]> {
-    const res = await api.get<MobileQuiz[]>(`/quizzes/topic/${topicId}`);
+  async getQuizzesByTopic(topicId: string, subjectName?: string): Promise<MobileQuiz[]> {
+    const query = subjectName ? `?subjectName=${encodeURIComponent(subjectName)}` : '';
+    const res = await api.get<MobileQuiz[]>(`/quizzes/topic/${topicId}${query}`);
     return res.data;
   },
 

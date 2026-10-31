@@ -75,15 +75,23 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <TouchableOpacity
+          style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          onPress={() => router.push('/select-class')}
+          activeOpacity={0.75}
+        >
           <View style={[styles.iconBox, { backgroundColor: colors.primaryMint }]}>
             <Ionicons name="book-outline" size={24} color={colors.primary} />
           </View>
           <View style={styles.infoContent}>
             <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Current Academic Class</Text>
             <Text style={[styles.infoValue, { color: colors.text }]}>{user?.class || 'No class assigned yet'}</Text>
+            <Text style={{ fontSize: 11, color: colors.primary, fontWeight: '600', marginTop: 2 }}>
+              Tap to switch or subscribe for another class
+            </Text>
           </View>
-        </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.primary} />
+        </TouchableOpacity>
 
       </ScrollView>
       

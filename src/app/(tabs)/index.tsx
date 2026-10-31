@@ -1,23 +1,30 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Modal } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { useAuth } from '@/store/AuthContext';
 import { useClass } from '@/store/ClassContext';
 import { useAppTheme } from '@/hooks/useAppTheme';
-import { studentDashboardService, StudentDashboardData } from '@/services/dashboard.service';
+import { studentDashboardService, StudentDashboardData, AnnouncementItem } from '@/services/dashboard.service';
+import { storageService } from '@/services/storage.service';
 
 export default function HomeScreen() {
   const { user } = useAuth();
   const { selectedClass } = useClass();
   const { colors, isDark } = useAppTheme();
+  const pathname = usePathname();
+  const isHomeScreen = pathname === '/' || pathname === '/(tabs)' || pathname === '/(tabs)/index';
   const currentClass = selectedClass || user?.class || 'JSS 1';
 
   const [dashboardData, setDashboardData] = useState<StudentDashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Announcements popup modal and unread badge count
+  const [unreadAnnouncementCount, setUnreadAnnouncementCount] = useState<number>(0);
+  const [announcementModalItem, setAnnouncementModalItem] = useState<AnnouncementItem | null>(null);
 
   const displayName = dashboardData?.student.firstName || user?.firstName || 'Student';
   const initial = displayName.charAt(0).toUpperCase();
@@ -36,25 +43,79 @@ export default function HomeScreen() {
     return 'school-outline' as const;
   };
 
+  const checkAnnouncementsAndBadge = useCallback(async () => {
+    try {
+      const [announcements, readIds, dismissedIds] = await Promise.all([
+        studentDashboardService.getAnnouncements(),
+        storageService.getReadAnnouncementIds(),
+        storageService.getDismissedModalAnnouncementIds(),
+      ]);
+
+      if (Array.isArray(announcements) && announcements.length > 0) {
+        const readSet = new Set(readIds || []);
+        const dismissedSet = new Set(dismissedIds || []);
+
+        // Filter unread count for badge
+        const unreadList = announcements.filter((a) => !readSet.has(a._id));
+        setUnreadAnnouncementCount(unreadList.length);
+
+        // Check for new, undismissed announcement to pop up modal
+        const latestUndismissed = announcements.find((a) => !dismissedSet.has(a._id));
+        if (latestUndismissed && isHomeScreen) {
+          setAnnouncementModalItem(latestUndismissed);
+        }
+      } else {
+        setUnreadAnnouncementCount(0);
+      }
+    } catch (err) {
+      console.warn('Failed checking announcements:', err);
+    }
+  }, [isHomeScreen]);
+
   const loadDashboard = useCallback(async () => {
     try {
       const data = await studentDashboardService.getDashboardData(currentClass, user?.id);
       setDashboardData(data);
+      await checkAnnouncementsAndBadge();
     } catch (err) {
       console.warn('Failed to load live student dashboard data:', err);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [currentClass, user?.id]);
+  }, [currentClass, user?.id, checkAnnouncementsAndBadge]);
 
   useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
 
+  // Refresh announcement badge whenever returning to Home Screen
+  useEffect(() => {
+    if (isHomeScreen) {
+      checkAnnouncementsAndBadge();
+    }
+  }, [isHomeScreen, checkAnnouncementsAndBadge]);
+
   const onRefresh = () => {
     setIsRefreshing(true);
     loadDashboard();
+  };
+
+  const handleDismissModal = async () => {
+    if (announcementModalItem) {
+      await storageService.dismissModalAnnouncement(announcementModalItem._id);
+      setAnnouncementModalItem(null);
+    }
+  };
+
+  const handleOpenNotificationFromModal = async () => {
+    if (announcementModalItem) {
+      await storageService.dismissModalAnnouncement(announcementModalItem._id);
+      await storageService.markAnnouncementAsRead(announcementModalItem._id);
+      setAnnouncementModalItem(null);
+      setUnreadAnnouncementCount((prev) => Math.max(0, prev - 1));
+      router.push('/notifications');
+    }
   };
 
   const overallProgress = Math.min(100, Math.max(0, dashboardData?.overallProgress.percentage || 0));
@@ -98,16 +159,31 @@ export default function HomeScreen() {
             </View>
             <View>
               <Text style={[styles.greeting, { color: colors.text }]}>Good day, {displayName}</Text>
-              <Text style={[styles.subGreeting, { color: colors.textSecondary }]}>
-                Enrolled in <Text style={{ fontWeight: '700', color: colors.primary }}>{currentClass}</Text>
-              </Text>
+              <TouchableOpacity
+                onPress={() => router.push('/select-class')}
+                activeOpacity={0.7}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}
+              >
+                <Text style={[styles.subGreeting, { color: colors.textSecondary }]}>
+                  Enrolled in <Text style={{ fontWeight: '700', color: colors.primary }}>{currentClass}</Text>
+                </Text>
+                <Ionicons name="chevron-down" size={14} color={colors.primary} />
+              </TouchableOpacity>
             </View>
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.notificationBtn, { backgroundColor: colors.surface, borderColor: colors.border }]} 
             onPress={() => router.push('/notifications')}
+            activeOpacity={0.7}
           >
             <Ionicons name="notifications-outline" size={24} color={colors.text} />
+            {unreadAnnouncementCount > 0 && (
+              <View style={[styles.notificationBadge, { backgroundColor: colors.danger }]}>
+                <Text style={styles.notificationBadgeText}>
+                  {unreadAnnouncementCount > 9 ? '9+' : unreadAnnouncementCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -145,8 +221,15 @@ export default function HomeScreen() {
                   style={[styles.continueBtn, { backgroundColor: colors.primary }]} 
                   onPress={() => {
                     router.push({
-                      pathname: '/(tabs)/subject-details',
-                      params: { id: currentLearning.subjectId, name: currentLearning.subjectName },
+                      pathname: '/(tabs)/topic-details',
+                      params: {
+                        id: currentLearning.subjectId,
+                        subjectId: currentLearning.subjectId,
+                        name: currentLearning.subjectName,
+                        subjectName: currentLearning.subjectName,
+                        topicId: currentLearning.topicId,
+                        topicTitle: currentLearning.topicTitle,
+                      },
                     });
                   }}
                 >
@@ -169,8 +252,8 @@ export default function HomeScreen() {
                   style={[styles.continueBtn, { backgroundColor: colors.primary }]} 
                   onPress={() => {
                     router.push({
-                      pathname: '/(tabs)/subject-details',
-                      params: { id: subjects[0]._id, name: subjects[0].name },
+                      pathname: '/(tabs)/topic-details',
+                      params: { id: subjects[0]._id, subjectId: subjects[0]._id, name: subjects[0].name, subjectName: subjects[0].name },
                     });
                   }}
                 >
@@ -221,8 +304,8 @@ export default function HomeScreen() {
                     style={[styles.subjectCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
                     onPress={() => {
                       router.push({
-                        pathname: '/(tabs)/subject-details',
-                        params: { id: subj._id, name: subj.name },
+                        pathname: '/(tabs)/topic-details',
+                        params: { id: subj._id, subjectId: subj._id, name: subj.name, subjectName: subj.name },
                       });
                     }}
                   >
@@ -247,8 +330,15 @@ export default function HomeScreen() {
                   style={[styles.currentCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
                   onPress={() => {
                     router.push({
-                      pathname: '/(tabs)/subject-details',
-                      params: { id: currentLearning.subjectId, name: currentLearning.subjectName },
+                      pathname: '/(tabs)/topic-details',
+                      params: {
+                        id: currentLearning.subjectId,
+                        subjectId: currentLearning.subjectId,
+                        name: currentLearning.subjectName,
+                        subjectName: currentLearning.subjectName,
+                        topicId: currentLearning.topicId,
+                        topicTitle: currentLearning.topicTitle,
+                      },
                     });
                   }}
                 >
@@ -309,6 +399,87 @@ export default function HomeScreen() {
         )}
 
       </ScrollView>
+
+      {/* Admin Announcement Popup Modal for Students */}
+      <Modal
+        visible={!!announcementModalItem}
+        transparent
+        animationType="fade"
+        onRequestClose={handleDismissModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.announcementModalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            {/* Modal Header */}
+            <View style={styles.announcementModalHeader}>
+              <View style={[styles.announcementIconBox, { backgroundColor: colors.primaryMint }]}>
+                <Ionicons name="megaphone" size={24} color={colors.primary} />
+              </View>
+              <TouchableOpacity
+                style={[styles.modalCloseIconBtn, { backgroundColor: colors.surfaceAlt }]}
+                onPress={handleDismissModal}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={20} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Announcement Audience and Label */}
+            <View style={styles.announcementMetaBadgeRow}>
+              <View style={[styles.announcementAudienceBadge, { backgroundColor: colors.primaryMint }]}>
+                <Text style={[styles.announcementAudienceText, { color: colors.primary }]}>
+                  {announcementModalItem?.audience || 'Announcement'}
+                </Text>
+              </View>
+              {announcementModalItem?.pinned && (
+                <View style={[styles.announcementAudienceBadge, { backgroundColor: '#FEE2E2' }]}>
+                  <Text style={[styles.announcementAudienceText, { color: '#DC2626' }]}>
+                    Important
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Title */}
+            <Text style={[styles.announcementModalTitle, { color: colors.text }]}>
+              {announcementModalItem?.title}
+            </Text>
+
+            {/* Author and Date */}
+            <View style={styles.announcementAuthorRow}>
+              <Ionicons name="person-circle-outline" size={15} color={colors.textSecondary} />
+              <Text style={[styles.announcementAuthorText, { color: colors.textSecondary }]}>
+                {announcementModalItem?.authorName || 'School Administrator'}
+              </Text>
+            </View>
+
+            {/* Content Body */}
+            <ScrollView style={styles.announcementBodyScroll} showsVerticalScrollIndicator={false}>
+              <Text style={[styles.announcementModalBody, { color: colors.textSecondary }]}>
+                {announcementModalItem?.content}
+              </Text>
+            </ScrollView>
+
+            {/* Actions */}
+            <View style={styles.announcementModalActions}>
+              <TouchableOpacity
+                style={[styles.announcementViewAllBtn, { backgroundColor: colors.primary }]}
+                onPress={handleOpenNotificationFromModal}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.announcementViewAllText}>View All Announcements</Text>
+                <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.announcementDismissBtn, { borderColor: colors.border }]}
+                onPress={handleDismissModal}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.announcementDismissText, { color: colors.textSecondary }]}>Dismiss</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -367,6 +538,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  notificationBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
   },
   highlightCard: {
     backgroundColor: '#E0F2F1', // Light teal
@@ -695,5 +885,112 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  announcementModalCard: {
+    width: '100%',
+    maxHeight: '80%',
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  announcementModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  announcementIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  announcementMetaBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  announcementAudienceBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  announcementAudienceText: {
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  announcementModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    lineHeight: 24,
+    marginBottom: 6,
+  },
+  announcementAuthorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 12,
+  },
+  announcementAuthorText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  announcementBodyScroll: {
+    maxHeight: 200,
+    marginVertical: 8,
+  },
+  announcementModalBody: {
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  announcementModalActions: {
+    gap: 8,
+    marginTop: 16,
+  },
+  announcementViewAllBtn: {
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  announcementViewAllText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  announcementDismissBtn: {
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  announcementDismissText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

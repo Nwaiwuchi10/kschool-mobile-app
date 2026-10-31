@@ -12,10 +12,12 @@ import { useAppTheme } from '@/hooks/useAppTheme';
 const SETTINGS_ITEMS = [
   { id: '1', title: 'Dashboard', icon: 'grid-outline', route: '/(tabs)' },
   { id: '2', title: 'Profile', icon: 'person-outline', route: '/profile' },
-  { id: '3', title: 'Notification', icon: 'notifications-outline', route: '/notifications' },
-  { id: '4', title: 'Change Password', icon: 'lock-closed-outline', route: '/change-password' },
-  { id: '5', title: 'Help & Support', icon: 'help-circle-outline', route: '/support' },
-  { id: '6', title: 'About KSCHOOLMATE', icon: 'information-circle-outline', route: '/about' },
+  { id: '3', title: 'Switch / Subscribe Class', icon: 'school-outline', route: '/select-class' },
+  { id: '4', title: 'Subscription & Payments', icon: 'card-outline', route: '/subscription' },
+  { id: '5', title: 'Notification', icon: 'notifications-outline', route: '/notifications' },
+  { id: '6', title: 'Change Password', icon: 'lock-closed-outline', route: '/change-password' },
+  { id: '7', title: 'Help & Support', icon: 'help-circle-outline', route: '/support' },
+  { id: '8', title: 'About KSCHOOLMATE', icon: 'information-circle-outline', route: '/about' },
 ];
 
 export default function SettingsScreen() {

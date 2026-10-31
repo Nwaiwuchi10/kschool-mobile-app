@@ -5,8 +5,10 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { subjectService, MobileSubject } from '@/services/subject.service';
+import { studentDashboardService } from '@/services/dashboard.service';
 import { useAuth } from '@/store/AuthContext';
 import { useClass } from '@/store/ClassContext';
+import { usePathname } from 'expo-router';
 
 import { useAppTheme } from '@/hooks/useAppTheme';
 
@@ -15,6 +17,9 @@ export default function SubjectsScreen() {
   const { selectedClass } = useClass();
   const { colors, isDark } = useAppTheme();
   const currentClass = selectedClass || user?.class || 'JSS 1';
+
+  const pathname = usePathname();
+  const isSubjectsTab = pathname?.includes('subjects');
 
   const [subjects, setSubjects] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -34,14 +39,33 @@ export default function SubjectsScreen() {
 
   const fetchSubjects = useCallback(async () => {
     try {
-      const data = await subjectService.getSubjects(currentClass);
-      if (data && data.length > 0) {
-        const mapped = data.map((item) => {
+      // Fetch both curriculum subjects and student's live personalized progress
+      const [subjectsData, dashboardData] = await Promise.all([
+        subjectService.getSubjects(currentClass).catch(() => []),
+        studentDashboardService.getDashboardData(currentClass, user?.id).catch(() => null),
+      ]);
+
+      const progressMap = new Map<string, number>();
+      if (dashboardData && Array.isArray(dashboardData.subjects)) {
+        dashboardData.subjects.forEach((s) => {
+          progressMap.set(s._id, s.progress || 0);
+          progressMap.set(s.name.toLowerCase().trim(), s.progress || 0);
+        });
+      }
+
+      if (subjectsData && subjectsData.length > 0) {
+        const mapped = subjectsData.map((item) => {
           const totalTopics = item.topics?.length || 0;
+          const liveProgress =
+            progressMap.get(item._id) ??
+            progressMap.get(item.name.toLowerCase().trim()) ??
+            item.progress ??
+            0;
+
           return {
             _id: item._id,
             name: item.name,
-            progress: item.progress || 0,
+            progress: Math.min(100, Math.max(0, liveProgress)),
             icon: getSubjectIcon(item.name),
             totalTopics,
           };
@@ -57,11 +81,11 @@ export default function SubjectsScreen() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [currentClass]);
+  }, [currentClass, user?.id]);
 
   useEffect(() => {
     fetchSubjects();
-  }, [fetchSubjects]);
+  }, [fetchSubjects, isSubjectsTab]);
 
   const onRefresh = () => {
     setIsRefreshing(true);
@@ -70,8 +94,8 @@ export default function SubjectsScreen() {
 
   const handleSubjectPress = (subject: any) => {
     router.push({
-      pathname: '/(tabs)/subject-details',
-      params: { id: subject._id, name: subject.name },
+      pathname: '/(tabs)/topic-details',
+      params: { id: subject._id, subjectId: subject._id, name: subject.name, subjectName: subject.name },
     });
   };
 
@@ -103,9 +127,26 @@ export default function SubjectsScreen() {
           <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} colors={[colors.primary]} />
         }
       >
-        <Text style={[styles.title, { color: colors.text }]}>Your Curriculum</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <Text style={[styles.title, { color: colors.text, marginBottom: 0 }]}>Your Curriculum</Text>
+          <TouchableOpacity
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 4,
+              backgroundColor: colors.primaryMint,
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 16,
+            }}
+            onPress={() => router.push('/select-class')}
+          >
+            <Ionicons name="swap-horizontal" size={14} color={colors.primary} />
+            <Text style={{ fontSize: 12, fontWeight: '800', color: colors.primary }}>{currentClass}</Text>
+          </TouchableOpacity>
+        </View>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Active curriculum for <Text style={{ fontWeight: '800', color: colors.primary }}>{currentClass}</Text>. Track your learning courses and master each topic.
+          Active curriculum for <Text style={{ fontWeight: '800', color: colors.primary }}>{currentClass}</Text>. You can switch or subscribe for another class anytime.
         </Text>
 
         {isLoading ? (

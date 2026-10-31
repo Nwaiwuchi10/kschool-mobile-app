@@ -23,6 +23,24 @@ export interface MobileLesson {
   isCompleted?: boolean;
 }
 
+export interface VoiceOption {
+  id: string;
+  name: string;
+  label: string;
+  accent: string;
+  gender: 'FEMALE' | 'MALE';
+  flag: string;
+}
+
+export const STUDENT_VOICES: VoiceOption[] = [
+  { id: 'en-GB-Neural2-A', name: 'Amy', label: 'Amy (Clara)', accent: 'British English', gender: 'FEMALE', flag: '🇬🇧' },
+  { id: 'en-GB-Neural2-B', name: 'Brian', label: 'Brian (Oliver)', accent: 'British English', gender: 'MALE', flag: '🇬🇧' },
+  { id: 'en-US-Neural2-F', name: 'Joanna', label: 'Joanna', accent: 'US English', gender: 'FEMALE', flag: '🇺🇸' },
+  { id: 'en-US-Neural2-D', name: 'Joey', label: 'Joey (Matthew)', accent: 'US English', gender: 'MALE', flag: '🇺🇸' },
+  { id: 'en-NG-Standard-A', name: 'Ayanda', label: 'Ebere (Ayanda)', accent: 'Nigerian / African', gender: 'FEMALE', flag: '🇳🇬' },
+  { id: 'en-US-Journey-F', name: 'Kendra', label: 'Kendra (Storyteller)', accent: 'Expressive English', gender: 'FEMALE', flag: '🌟' },
+];
+
 export const lessonService = {
   /**
    * Get a single lesson by ID with audio and content

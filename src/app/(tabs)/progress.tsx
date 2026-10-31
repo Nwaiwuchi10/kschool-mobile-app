@@ -154,8 +154,8 @@ export default function ProgressScreen() {
                     style={[styles.subjectCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
                     onPress={() => {
                       router.push({
-                        pathname: '/(tabs)/subject-details',
-                        params: { id: subject._id, name: subject.name },
+                        pathname: '/(tabs)/topic-details',
+                        params: { id: subject._id, subjectId: subject._id, name: subject.name, subjectName: subject.name },
                       });
                     }}
                   >

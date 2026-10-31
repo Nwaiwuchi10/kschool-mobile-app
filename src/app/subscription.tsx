@@ -17,10 +17,11 @@ import { useAppTheme } from '@/hooks/useAppTheme';
 
 export default function SubscriptionScreen() {
   const { colors, isDark } = useAppTheme();
-  const { paidClass, selectedClass } = useClass();
-  const currentClass = paidClass || selectedClass;
+  const { paidClass, paidClasses, selectedClass } = useClass();
+  const currentClass = selectedClass || paidClass;
 
   const [activeSub, setActiveSub] = useState<UserSubscription | null>(null);
+  const [activeSubs, setActiveSubs] = useState<UserSubscription[]>([]);
   const [history, setHistory] = useState<UserSubscription[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -29,12 +30,14 @@ export default function SubscriptionScreen() {
     const fetchSubData = async () => {
       try {
         setLoading(true);
-        const [sub, historyList] = await Promise.all([
-          subscriptionService.getMyActiveSubscription(),
+        const [sub, allSubs, historyList] = await Promise.all([
+          subscriptionService.getMyActiveSubscription(selectedClass),
+          subscriptionService.getMyActiveSubscriptions(),
           subscriptionService.getMyHistory(),
         ]);
         if (isMounted) {
-          setActiveSub(sub);
+          setActiveSub(sub || (allSubs.length > 0 ? allSubs[0] : null));
+          setActiveSubs(allSubs);
           setHistory(historyList);
         }
       } catch (err) {
@@ -48,7 +51,7 @@ export default function SubscriptionScreen() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [selectedClass]);
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return 'N/A';
@@ -124,10 +127,14 @@ export default function SubscriptionScreen() {
 
                 <View style={[styles.separatorTeal, { backgroundColor: colors.primary }]} />
 
-                {currentClass && (
+                {(activeSub.classLevel || currentClass) && (
                   <View style={styles.detailRow}>
-                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Class</Text>
-                    <Text style={[styles.detailValue, { color: colors.text }]}>{currentClass}</Text>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Subscribed Class(es)</Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {paidClasses && paidClasses.length > 0
+                        ? paidClasses.join(', ')
+                        : activeSub.classLevel || currentClass}
+                    </Text>
                   </View>
                 )}
 
@@ -140,9 +147,9 @@ export default function SubscriptionScreen() {
 
                 <TouchableOpacity
                   style={[styles.renewBtn, { backgroundColor: colors.primary }]}
-                  onPress={() => router.push('/premium-access')}
+                  onPress={() => router.push('/choose-plan')}
                 >
-                  <Text style={styles.renewBtnText}>Renew Package</Text>
+                  <Text style={styles.renewBtnText}>Subscribe for Another Class / Renew</Text>
                 </TouchableOpacity>
               </View>
             ) : (

@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import { useClass } from '@/store/ClassContext';
+import { storageService, LearningContextData } from '@/services/storage.service';
 
 export default function PaymentSuccessScreen() {
   const params = useLocalSearchParams<{
@@ -13,18 +14,64 @@ export default function PaymentSuccessScreen() {
     packageName?: string;
     academicSession?: string;
     amount?: string;
+    classLevel?: string;
+    topicId?: string;
+    topicTitle?: string;
+    subjectId?: string;
+    subjectName?: string;
   }>();
 
-  const { selectedClass } = useClass();
-  const currentClass = selectedClass || 'JSS 1';
+  const { selectedClass, refreshClassStatus } = useClass();
+  const currentClass = params.classLevel || selectedClass || 'JSS 1';
+  const [savedContext, setSavedContext] = React.useState<LearningContextData | null>(null);
 
   const packageName = params.packageName || `${currentClass} Learning Package`;
   const academicSession = params.academicSession || '2026/2027';
   const amountPaid = params.amount || '₦25,000';
   const reference = params.reference || `KSM-${Math.floor(10000000 + Math.random() * 90000000)}`;
 
-  const handleContinueLearning = () => {
-    // Navigate straight to curriculum tab with active access
+  React.useEffect(() => {
+    refreshClassStatus().catch(() => {});
+    storageService
+      .getLastLearningContext()
+      .then((ctx) => {
+        if (ctx) setSavedContext(ctx);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleContinueLearning = async () => {
+    const ctx = savedContext || (await storageService.getLastLearningContext().catch(() => null));
+    const targetTopicId = params.topicId || ctx?.topicId;
+    const targetTopicTitle = params.topicTitle || ctx?.topicTitle;
+    const targetSubjectId = params.subjectId || ctx?.subjectId;
+    const targetSubjectName = params.subjectName || ctx?.subjectName;
+
+    // Navigate back to the lessons list page (/topic-details) of the particular subject they were in before payment
+    if (targetTopicId) {
+      router.replace({
+        pathname: '/topic-details',
+        params: {
+          topicId: targetTopicId,
+          topicTitle: targetTopicTitle || 'Topic Details',
+          subjectName: targetSubjectName || 'Subject',
+          subjectId: targetSubjectId,
+        },
+      });
+      return;
+    }
+
+    if (targetSubjectId) {
+      router.replace({
+        pathname: '/subject-details',
+        params: {
+          id: targetSubjectId,
+          name: targetSubjectName || 'Subject Curriculum',
+        },
+      });
+      return;
+    }
+
     router.replace('/(tabs)/subjects');
   };
 
@@ -46,7 +93,7 @@ export default function PaymentSuccessScreen() {
         >
           <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Payment Status</Text>
+        <Text style={styles.headerTitle}>Subscription Confirmation</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
@@ -56,9 +103,9 @@ export default function PaymentSuccessScreen() {
             <Ionicons name="checkmark" size={44} color="#10B981" />
           </View>
 
-          <Text style={styles.title}>Payment Successful!</Text>
+          <Text style={styles.title}>Subscription Verified!</Text>
           <Text style={styles.subtitle}>
-            Your {packageName} is ready. Start learning right away.
+            Your Paystack payment for {currentClass} ({packageName}) has been verified. All subsequent lessons and quizzes for {currentClass} are now unlocked as you complete each lesson and its quiz exercise.
           </Text>
         </View>
 
@@ -70,11 +117,16 @@ export default function PaymentSuccessScreen() {
               <Text style={styles.receiptSubtitle}>{academicSession} Academic Session</Text>
             </View>
             <View style={styles.activePill}>
-              <Text style={styles.activePillText}>Active</Text>
+              <Text style={styles.activePillText}>Verified & Active</Text>
             </View>
           </View>
 
           <View style={styles.separator} />
+
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Subscribed Class</Text>
+            <Text style={styles.detailValue}>{currentClass}</Text>
+          </View>
 
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Amount paid</Text>

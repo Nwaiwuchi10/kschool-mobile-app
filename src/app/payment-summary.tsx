@@ -1,5 +1,5 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -18,16 +18,23 @@ import PrimaryButton from '@/components/ui/PrimaryButton';
 import { useClass } from '@/store/ClassContext';
 import { subscriptionService } from '@/services/subscription.service';
 
+const PAYSTACK_CALLBACK_URL = 'https://kschoolmate.com/payment-callback';
+
 export default function PaymentSummaryScreen() {
   const params = useLocalSearchParams<{
     packageId?: string;
     packageName?: string;
     academicSession?: string;
     price?: string;
+    classLevel?: string;
+    topicId?: string;
+    topicTitle?: string;
+    subjectId?: string;
+    subjectName?: string;
   }>();
 
-  const { selectedClass } = useClass();
-  const currentClass = selectedClass || 'JSS 1';
+  const { selectedClass, selectClass, refreshClassStatus } = useClass();
+  const currentClass = params.classLevel || selectedClass || 'JSS 1';
 
   const packageName = params.packageName || `${currentClass} Learning Package`;
   const academicSession = params.academicSession || '2026/2027';
@@ -39,13 +46,39 @@ export default function PaymentSummaryScreen() {
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [currentReference, setCurrentReference] = useState<string | null>(null);
   const [showWebView, setShowWebView] = useState(false);
+  const hasVerifiedRef = useRef(false);
+
+  const extractRefFromUrl = (url: string): string | null => {
+    try {
+      const match = url.match(/[?&](?:reference|trxref)=([^&#]+)/i);
+      return match && match[1] ? decodeURIComponent(match[1]) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const isCallbackOrSuccessUrl = (url: string): boolean => {
+    if (!url) return false;
+    return (
+      url.includes('payment-callback') ||
+      url.includes('trxref=') ||
+      url.includes('reference=') ||
+      url.includes('paystack.com/success') ||
+      url.includes('standard.paystack.co/close') ||
+      url.includes('paymentStatus=PAID') ||
+      url.includes('payment_success') ||
+      url.includes('responseCode=0')
+    );
+  };
 
   const handleStartPayment = async () => {
     try {
       setIsInitializing(true);
+      hasVerifiedRef.current = false;
       const res = await subscriptionService.initializePaystack(
         params.packageId || 'default',
-        'https://kschoolmate.com/payment-callback',
+        PAYSTACK_CALLBACK_URL,
+        currentClass,
       );
 
       const targetUrl = res?.authorizationUrl || res?.checkoutUrl;
@@ -55,64 +88,69 @@ export default function PaymentSummaryScreen() {
         setCurrentReference(ref || `PAYSTACK-KSM-${Date.now()}`);
         setCheckoutUrl(targetUrl);
         setShowWebView(true);
+      } else {
+        Alert.alert('Payment Error', 'Could not retrieve Paystack authorization URL. Please try again.');
       }
     } catch (err: any) {
       console.error('Payment init error:', err);
-      // Fallback Paystack simulator for development/testing
-      const fallbackRef = `PAYSTACK-KSM-${Date.now()}`;
-      setCurrentReference(fallbackRef);
-      setCheckoutUrl(`https://checkout.paystack.com/${fallbackRef}`);
-      setShowWebView(true);
+      Alert.alert(
+        'Payment Connection Notice',
+        err?.response?.data?.message || 'Unable to initialize Paystack checkout right now. Please check your connection and try again.'
+      );
     } finally {
       setIsInitializing(false);
     }
   };
 
-  const handleWebViewNavigationStateChange = async (navState: any) => {
-    const { url } = navState;
-
-    // Detect callback redirect or payment completion for Paystack
-    if (
-      url.includes('payment-callback') ||
-      url.includes('trxref=') ||
-      url.includes('reference=') ||
-      url.includes('paystack.com/success') ||
-      url.includes('paymentStatus=PAID') ||
-      url.includes('payment_success') ||
-      url.includes('responseCode=0')
-    ) {
+  const handleWebViewNavigationStateChange = (navState: any) => {
+    const url = navState?.url || '';
+    if (isCallbackOrSuccessUrl(url) && !hasVerifiedRef.current) {
+      hasVerifiedRef.current = true;
+      const urlRef = extractRefFromUrl(url);
       setShowWebView(false);
-      await confirmAndActivate();
+      confirmAndActivate(urlRef || undefined);
     }
   };
 
-  const confirmAndActivate = async () => {
+  const confirmAndActivate = async (overrideRef?: string) => {
     try {
       setIsInitializing(true);
-      const ref = currentReference || `PAYSTACK-KSM-${Date.now()}`;
-      await subscriptionService.verifyPaystack(ref, params.packageId);
+      const ref = overrideRef || currentReference || `PAYSTACK-KSM-${Date.now()}`;
+      await subscriptionService.verifyPaystack(ref, params.packageId || 'default', currentClass);
+      await selectClass(currentClass).catch(() => {});
+      await refreshClassStatus().catch(() => {});
 
-      router.push({
+      router.replace({
         pathname: '/payment-success',
         params: {
           reference: ref,
           packageName,
           academicSession,
           amount: priceFormatted,
+          classLevel: currentClass,
+          topicId: params.topicId,
+          topicTitle: params.topicTitle,
+          subjectId: params.subjectId,
+          subjectName: params.subjectName,
         },
       });
-    } catch (err) {
-      console.warn('Backend verify notice:', err);
-      // Navigate to success screen with confirmed reference
-      router.push({
-        pathname: '/payment-success',
-        params: {
-          reference: currentReference || `PAYSTACK-KSM-${Date.now()}`,
-          packageName,
-          academicSession,
-          amount: priceFormatted,
-        },
-      });
+    } catch (err: any) {
+      console.warn('Backend verify error:', err);
+      Alert.alert(
+        'Verification Pending',
+        err?.response?.data?.message ||
+          'We could not verify your payment yet. If you completed the payment on Paystack, tap "Verify Again" to confirm.',
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => { hasVerifiedRef.current = false; } },
+          {
+            text: 'Verify Again',
+            onPress: () => {
+              hasVerifiedRef.current = false;
+              confirmAndActivate(overrideRef);
+            },
+          },
+        ]
+      );
     } finally {
       setIsInitializing(false);
     }
@@ -146,13 +184,18 @@ export default function PaymentSummaryScreen() {
           <View style={styles.separator} />
 
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Package</Text>
+            <Text style={styles.detailLabel}>Subscription Plan</Text>
+            <Text style={styles.detailValue}>{packageName}</Text>
+          </View>
+
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Selected Class (1 Year)</Text>
             <Text style={styles.detailValue}>{currentClass}</Text>
           </View>
 
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Academic session</Text>
-            <Text style={styles.detailValue}>{academicSession}</Text>
+            <Text style={styles.detailLabel}>Duration</Text>
+            <Text style={styles.detailValue}>1 Year ({academicSession})</Text>
           </View>
 
           <View style={styles.detailRow}>
@@ -220,10 +263,13 @@ export default function PaymentSummaryScreen() {
             </TouchableOpacity>
             <Text style={styles.modalHeaderTitle}>Paystack Secure Checkout</Text>
             <TouchableOpacity
-              onPress={confirmAndActivate}
+              onPress={() => {
+                setShowWebView(false);
+                confirmAndActivate();
+              }}
               style={styles.simulateSuccessBtn}
             >
-              <Text style={styles.simulateSuccessText}>Done</Text>
+              <Text style={styles.simulateSuccessText}>Verify Payment</Text>
             </TouchableOpacity>
           </View>
 
@@ -237,6 +283,17 @@ export default function PaymentSummaryScreen() {
                 scalesPageToFit={true}
                 originWhitelist={['*']}
                 onNavigationStateChange={handleWebViewNavigationStateChange}
+                onShouldStartLoadWithRequest={(request) => {
+                  const reqUrl = request?.url || '';
+                  if (isCallbackOrSuccessUrl(reqUrl) && !hasVerifiedRef.current) {
+                    hasVerifiedRef.current = true;
+                    const urlRef = extractRefFromUrl(reqUrl);
+                    setShowWebView(false);
+                    confirmAndActivate(urlRef || undefined);
+                    return false;
+                  }
+                  return true;
+                }}
                 startInLoadingState={true}
                 onError={(syntheticEvent) => {
                   const { nativeEvent } = syntheticEvent;

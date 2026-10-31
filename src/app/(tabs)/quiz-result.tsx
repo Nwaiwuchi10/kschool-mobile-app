@@ -1,14 +1,17 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useClass } from '@/store/ClassContext';
+import { subscriptionService } from '@/services/subscription.service';
 
 export default function QuizResultScreen() {
   const { colors, isDark } = useAppTheme();
+  const { selectedClass } = useClass();
   const params = useLocalSearchParams<{
     score?: string;
     total?: string;
@@ -16,7 +19,28 @@ export default function QuizResultScreen() {
     title?: string;
     topicId?: string;
     lessonId?: string;
+    quizId?: string;
+    subjectName?: string;
+    nextLessonId?: string;
+    nextLessonTitle?: string;
   }>();
+
+  const [hasSubscription, setHasSubscription] = useState<boolean>(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    subscriptionService
+      .getMyActiveSubscription(selectedClass)
+      .then((sub) => {
+        if (isMounted) {
+          setHasSubscription(!!sub && (sub.status === 'active' || sub.status === 'grace'));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedClass]);
 
   const scoreNum = params.score ? parseInt(params.score, 10) : 0;
   const totalNum = params.total ? parseInt(params.total, 10) : 0;
@@ -59,8 +83,8 @@ export default function QuizResultScreen() {
           <Text style={[styles.title, { color: colors.text }]}>{isPassed ? 'Quiz Completed!' : 'Keep Going!'}</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             {isPassed
-              ? `Outstanding effort! You have successfully mastered the ${quizTitle}.`
-              : `Good practice! Review the lesson materials and try ${quizTitle} again to reach 70%.`}
+              ? `Outstanding effort! You scored ${percent}% and successfully passed ${quizTitle}.`
+              : `You scored ${percent}%, which is below the 70% cut-off mark. Please retake the lesson and retry the quiz to proceed.`}
           </Text>
 
           <View style={[styles.scoreBox, { backgroundColor: colors.surfaceAlt }]}>
@@ -102,53 +126,182 @@ export default function QuizResultScreen() {
 
         {/* Actions */}
         <View style={styles.actionsContainer}>
-          <PrimaryButton
-            title="Continue Journey"
-            onPress={() => {
-              if (params.topicId) {
-                router.replace({
-                  pathname: '/topic-details',
-                  params: { topicId: params.topicId },
-                });
-              } else {
-                router.replace('/(tabs)/subjects');
-              }
-            }}
-          />
-          <TouchableOpacity
-            style={[styles.secondaryBtn, styles.btnOutlineTeal, { borderColor: colors.primary, backgroundColor: colors.surface }]}
-            onPress={() => {
-              if (params.lessonId) {
-                router.push({
-                  pathname: '/lesson',
-                  params: { id: params.lessonId, topicId: params.topicId },
-                });
-              } else {
-                router.push('/lesson');
-              }
-            }}
-          >
-            <Text style={[styles.btnTextTeal, { color: colors.primary }]}>Review Lesson</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.secondaryBtn, styles.btnOutlineGrey, { borderColor: colors.border, backgroundColor: colors.surface }]}
-            onPress={() => router.back()}
-          >
-            <Text style={[styles.btnTextGrey, { color: colors.textSecondary }]}>Retry Quiz</Text>
-          </TouchableOpacity>
+          {isPassed ? (
+            /* Student Passed (>= 50%): Allowed to proceed to next lesson */
+            <>
+              <PrimaryButton
+                title={
+                  params.nextLessonId
+                    ? hasSubscription
+                      ? 'Proceed to Next Lesson'
+                      : 'Subscribe to Unlock Next Lesson'
+                    : 'Continue Journey'
+                }
+                onPress={() => {
+                  if (params.nextLessonId) {
+                    if (hasSubscription) {
+                      router.replace({
+                        pathname: '/lesson',
+                        params: {
+                          id: params.nextLessonId,
+                          title: params.nextLessonTitle || 'Next Lesson',
+                          subject: params.subjectName || 'Subject Curriculum',
+                          topicId: params.topicId,
+                        },
+                      });
+                    } else {
+                      router.push({
+                        pathname: '/premium-access',
+                        params: {
+                          topicId: params.topicId,
+                          subjectName: params.subjectName ? params.subjectName.split(' > ')[0] : undefined,
+                          topicTitle: params.subjectName ? params.subjectName.split(' > ')[1] : undefined,
+                        },
+                      });
+                    }
+                  } else if (params.topicId) {
+                    router.replace({
+                      pathname: '/topic-details',
+                      params: { topicId: params.topicId },
+                    });
+                  } else {
+                    router.replace('/(tabs)/subjects');
+                  }
+                }}
+              />
+              {params.topicId && params.nextLessonId ? (
+                <TouchableOpacity
+                  style={[styles.secondaryBtn, styles.btnOutlineTeal, { borderColor: colors.primary, backgroundColor: colors.surface }]}
+                  onPress={() => {
+                    router.replace({
+                      pathname: '/topic-details',
+                      params: { topicId: params.topicId },
+                    });
+                  }}
+                >
+                  <Text style={[styles.btnTextTeal, { color: colors.primary }]}>Back to Topic Lessons</Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity
+                style={[styles.secondaryBtn, styles.btnOutlineTeal, { borderColor: colors.primary, backgroundColor: colors.surface }]}
+                onPress={() => {
+                  if (params.lessonId) {
+                    router.push({
+                      pathname: '/lesson',
+                      params: {
+                        id: params.lessonId,
+                        topicId: params.topicId,
+                        subject: params.subjectName || undefined,
+                      },
+                    });
+                  } else {
+                    router.push('/lesson');
+                  }
+                }}
+              >
+                <Text style={[styles.btnTextTeal, { color: colors.primary }]}>Review Lesson</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.secondaryBtn, styles.btnOutlineGrey, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                onPress={() => {
+                  router.replace({
+                    pathname: '/quiz',
+                    params: {
+                      topicId: params.topicId,
+                      lessonId: params.lessonId,
+                      quizId: params.quizId,
+                      title: params.title,
+                      subjectName: params.subjectName,
+                      nextLessonId: params.nextLessonId,
+                      nextLessonTitle: params.nextLessonTitle,
+                      retryTs: Date.now().toString(),
+                    },
+                  });
+                }}
+              >
+                <Text style={[styles.btnTextGrey, { color: colors.textSecondary }]}>Practice Quiz Again</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            /* Student Failed (< 50%): Blocked from next lesson; must retake lesson & retry quiz */
+            <>
+              <PrimaryButton
+                title="Retake This Lesson"
+                onPress={() => {
+                  if (params.lessonId) {
+                    router.replace({
+                      pathname: '/lesson',
+                      params: {
+                        id: params.lessonId,
+                        topicId: params.topicId,
+                        subject: params.subjectName || undefined,
+                      },
+                    });
+                  } else if (params.topicId) {
+                    router.replace({
+                      pathname: '/topic-details',
+                      params: { topicId: params.topicId },
+                    });
+                  } else {
+                    router.replace('/(tabs)/subjects');
+                  }
+                }}
+              />
+              <TouchableOpacity
+                style={[styles.secondaryBtn, styles.btnOutlineTeal, { borderColor: colors.primary, backgroundColor: colors.surface }]}
+                onPress={() => {
+                  router.replace({
+                    pathname: '/quiz',
+                    params: {
+                      topicId: params.topicId,
+                      lessonId: params.lessonId,
+                      quizId: params.quizId,
+                      title: params.title,
+                      subjectName: params.subjectName,
+                      nextLessonId: params.nextLessonId,
+                      nextLessonTitle: params.nextLessonTitle,
+                      retryTs: Date.now().toString(),
+                    },
+                  });
+                }}
+              >
+                <Text style={[styles.btnTextTeal, { color: colors.primary }]}>Retake Quiz (From Q1)</Text>
+              </TouchableOpacity>
+              {params.topicId ? (
+                <TouchableOpacity
+                  style={[styles.secondaryBtn, styles.btnOutlineGrey, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                  onPress={() => {
+                    router.replace({
+                      pathname: '/topic-details',
+                      params: { topicId: params.topicId },
+                    });
+                  }}
+                >
+                  <Text style={[styles.btnTextGrey, { color: colors.textSecondary }]}>Back to Topic</Text>
+                </TouchableOpacity>
+              ) : null}
+            </>
+          )}
         </View>
 
         {/* Unlock Status */}
         <View style={styles.unlockStatus}>
           <Ionicons
-            name={isPassed ? 'lock-open-outline' : 'lock-closed-outline'}
+            name={isPassed ? (hasSubscription ? 'lock-open-outline' : 'lock-closed-outline') : 'alert-circle-outline'}
             size={16}
-            color={isPassed ? colors.primary : colors.textSecondary}
+            color={isPassed ? (hasSubscription ? colors.primary : colors.textSecondary) : colors.warning}
           />
-          <Text style={[styles.unlockText, { color: isPassed ? colors.primary : colors.textSecondary }]}>
+          <Text
+            style={[
+              styles.unlockText,
+              { color: isPassed ? (hasSubscription ? colors.primary : colors.textSecondary) : colors.warning },
+            ]}
+          >
             {isPassed
-              ? 'Topic Completed! Next topic unlocked.'
-              : 'Pass with 70% or higher to unlock next topic.'}
+              ? hasSubscription
+                ? 'Lesson & Quiz Passed! Subsequent lessons are unlocked.'
+                : 'First lesson & quiz passed! Subscribe for your class to unlock all other lessons.'
+              : 'Pass mark required: You need at least 70% to unlock the next lesson. Please retake this lesson and quiz.'}
           </Text>
         </View>
       </ScrollView>

@@ -22,10 +22,13 @@ interface ClassContextType {
   classes: SchoolClass[];
   selectedClass: string;
   paidClass: string | null;
+  paidClasses: string[];
   isClassLocked: boolean;
+  isCurrentClassSubscribed: boolean;
   isLoadingClasses: boolean;
   selectClass: (className: string) => Promise<void>;
   refreshClasses: () => Promise<void>;
+  refreshClassStatus: () => Promise<void>;
 }
 
 const ClassContext = createContext<ClassContextType | undefined>(undefined);
@@ -35,8 +38,13 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [classes, setClasses] = useState<SchoolClass[]>(FALLBACK_CLASSES);
   const [selectedClass, setSelectedClassState] = useState<string>('JSS 1');
   const [paidClass, setPaidClass] = useState<string | null>(null);
+  const [paidClasses, setPaidClasses] = useState<string[]>([]);
   const [isClassLocked, setIsClassLocked] = useState<boolean>(false);
+  const [isCurrentClassSubscribed, setIsCurrentClassSubscribed] = useState<boolean>(false);
   const [isLoadingClasses, setIsLoadingClasses] = useState<boolean>(true);
+
+  const normalizeClass = (c: string) =>
+    c.trim().toLowerCase().replace(/^sss\s+/, 'ss ');
 
   // Fetch classes from backend on mount
   const refreshClasses = async () => {
@@ -53,11 +61,44 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const refreshClassStatus = async () => {
+    if (!token) {
+      setPaidClass(null);
+      setPaidClasses([]);
+      setIsClassLocked(false);
+      setIsCurrentClassSubscribed(false);
+      return;
+    }
+
+    try {
+      const status = await classService.getMyClassStatus();
+      if (status.selectedClass) {
+        setSelectedClassState(status.selectedClass);
+      }
+      setPaidClass(status.paidClass || null);
+      const classesList = Array.isArray(status.paidClasses)
+        ? status.paidClasses
+        : status.paidClass
+        ? [status.paidClass]
+        : [];
+      setPaidClasses(classesList);
+      setIsClassLocked(false);
+      const current = status.selectedClass || selectedClass;
+      const isSub =
+        status.isCurrentClassSubscribed !== undefined
+          ? status.isCurrentClassSubscribed
+          : classesList.some((pc) => normalizeClass(pc) === normalizeClass(current));
+      setIsCurrentClassSubscribed(isSub);
+    } catch (err) {
+      console.warn('Failed to fetch class lock status:', err);
+    }
+  };
+
   useEffect(() => {
     refreshClasses();
   }, []);
 
-  // Restore selected class & check lock status when auth state changes
+  // Restore selected class & check subscription status when auth state changes
   useEffect(() => {
     const syncClassState = async () => {
       // 1. If user has class on profile, use it
@@ -71,25 +112,8 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       }
 
-      // 2. If authenticated, fetch subscription class lock status
-      if (token) {
-        try {
-          const status = await classService.getMyClassStatus();
-          if (status.selectedClass) {
-            setSelectedClassState(status.selectedClass);
-          }
-          setPaidClass(status.paidClass || null);
-          setIsClassLocked(status.isClassLocked);
-          if (status.paidClass && status.isClassLocked) {
-            setSelectedClassState(status.paidClass);
-          }
-        } catch (err) {
-          console.warn('Failed to fetch class lock status:', err);
-        }
-      } else {
-        setPaidClass(null);
-        setIsClassLocked(false);
-      }
+      // 2. If authenticated, fetch subscription class status
+      await refreshClassStatus();
     };
 
     syncClassState();
@@ -98,24 +122,20 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const selectClass = async (className: string) => {
     const trimmed = className.trim();
 
-    // Check lock
-    if (isClassLocked && paidClass && paidClass.toLowerCase() !== trimmed.toLowerCase()) {
-      throw new Error(
-        `You have an active subscription for ${paidClass}. In accordance with your academic enrollment, you must remain in this class.`
-      );
-    }
-
     // Update local state and storage
     setSelectedClassState(trimmed);
     await storageService.setSelectedClass(trimmed);
+    setIsCurrentClassSubscribed(
+      paidClasses.some((pc) => normalizeClass(pc) === normalizeClass(trimmed))
+    );
 
     // If authenticated, sync with backend
     if (token) {
       try {
         await classService.selectClass(trimmed);
         updateUserData({ class: trimmed });
+        await refreshClassStatus();
       } catch (err: any) {
-        // If conflict error from backend, re-throw so UI modal can display it
         throw err;
       }
     }
@@ -127,10 +147,13 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         classes,
         selectedClass,
         paidClass,
+        paidClasses,
         isClassLocked,
+        isCurrentClassSubscribed,
         isLoadingClasses,
         selectClass,
         refreshClasses,
+        refreshClassStatus,
       }}
     >
       {children}

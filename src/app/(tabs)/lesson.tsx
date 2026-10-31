@@ -9,17 +9,22 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { lessonService, MobileLesson } from '@/services/lesson.service';
+import { lessonService, MobileLesson, STUDENT_VOICES, VoiceOption } from '@/services/lesson.service';
+import { quizService, MobileQuiz } from '@/services/quiz.service';
+import { storageService } from '@/services/storage.service';
 import { MathView } from '@/components/MathView';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useClass } from '@/store/ClassContext';
 
 export default function LessonScreen() {
   const { colors, isDark } = useAppTheme();
+  const { selectedClass } = useClass();
   const params = useLocalSearchParams<{
     id?: string;
     title?: string;
@@ -28,15 +33,26 @@ export default function LessonScreen() {
   }>();
 
   const [lesson, setLesson] = useState<MobileLesson | null>(null);
+  const [lessonQuizzes, setLessonQuizzes] = useState<MobileQuiz[]>([]);
   const [isLoadingLesson, setIsLoadingLesson] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
 
   const [isSynthesizing, setIsSynthesizing] = useState(false);
+  const [selectedVoice, setSelectedVoice] = useState<VoiceOption>(STUDENT_VOICES[0]);
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
 
-  // Audio source and player setup
-  const [activeAudioUrl, setActiveAudioUrl] = useState<string>(lesson?.audioUrl || lesson?.voiceNoteUrl || '');
-  const player = useAudioPlayer(activeAudioUrl ? activeAudioUrl : undefined);
-  const status = useAudioPlayerStatus(player);
+  // Separate Audio Players for TTS Narrator and Teacher's Explanation
+  // 1. TTS Narrator Player
+  const [ttsAudioUrl, setTtsAudioUrl] = useState<string>('');
+  const ttsPlayer = useAudioPlayer(ttsAudioUrl ? { uri: ttsAudioUrl } : null);
+  const ttsStatus = useAudioPlayerStatus(ttsPlayer);
+  const [ttsSpeed, setTtsSpeed] = useState<number>(1.0);
+
+  // 2. Teacher's Explanation Player
+  const [teacherAudioUrl, setTeacherAudioUrl] = useState<string>(lesson?.voiceNoteUrl || '');
+  const teacherPlayer = useAudioPlayer(teacherAudioUrl ? { uri: teacherAudioUrl } : null);
+  const teacherStatus = useAudioPlayerStatus(teacherPlayer);
+  const [teacherSpeed, setTeacherSpeed] = useState<number>(1.0);
 
   const [topicLessons, setTopicLessons] = useState<MobileLesson[]>([]);
 
@@ -44,51 +60,133 @@ export default function LessonScreen() {
   const subjectName = params.subject || 'Subject Curriculum';
   const lessonContent = lesson?.content || '';
 
-  // Keep activeAudioUrl in sync when lesson loads
+  // Load student's saved preferred voice
+  useEffect(() => {
+    const loadVoice = async () => {
+      try {
+        const savedVoiceId = await storageService.getPreferredVoice();
+        const found = STUDENT_VOICES.find((v) => v.id === savedVoiceId);
+        if (found) {
+          setSelectedVoice(found);
+        }
+      } catch {
+        // Fallback default
+      }
+    };
+    loadVoice();
+  }, []);
+
+  // Keep audio sources in sync when lesson loads
   useEffect(() => {
     if (lesson?.audioUrl) {
-      setActiveAudioUrl(lesson.audioUrl);
-    } else if (lesson?.voiceNoteUrl) {
-      setActiveAudioUrl(lesson.voiceNoteUrl);
+      setTtsAudioUrl(lesson.audioUrl);
+    }
+    if (lesson?.voiceNoteUrl) {
+      setTeacherAudioUrl(lesson.voiceNoteUrl);
     }
   }, [lesson?.audioUrl, lesson?.voiceNoteUrl]);
+
+  // Keep player sources synchronized without redundant replace calls
+  useEffect(() => {
+    if (ttsAudioUrl && ttsPlayer) {
+      try {
+        ttsPlayer.replace({ uri: ttsAudioUrl });
+      } catch (err) {
+        console.warn('TTS player replace error:', err);
+      }
+    }
+  }, [ttsAudioUrl]);
+
+  useEffect(() => {
+    if (teacherAudioUrl && teacherPlayer) {
+      try {
+        teacherPlayer.replace({ uri: teacherAudioUrl });
+      } catch (err) {
+        console.warn('Teacher player replace error:', err);
+      }
+    }
+  }, [teacherAudioUrl]);
 
   // Fetch current lesson and sibling lessons for topic
   useEffect(() => {
     let isMounted = true;
-    const fetchLesson = async () => {
-      if (!params.id) return;
+
+    // Reset previous lesson state when switching to a different lesson/topic
+    setLesson(null);
+    setTtsAudioUrl('');
+    setTeacherAudioUrl('');
+    setTopicLessons([]);
+    setLessonQuizzes([]);
+
+    const fetchLessonData = async () => {
       try {
         setIsLoadingLesson(true);
-        const data = await lessonService.getLessonById(params.id);
-        if (isMounted && data) {
-          setLesson(data);
-          const preferredAudio = data.audioUrl || data.voiceNoteUrl || '';
-          if (preferredAudio) {
-            setActiveAudioUrl(preferredAudio);
+        let currentLessonData: MobileLesson | null = null;
+
+        // 1. If params.id is given, load that specific lesson
+        if (params.id) {
+          try {
+            currentLessonData = await lessonService.getLessonById(params.id);
+          } catch (err) {
+            console.warn('Error fetching lesson by ID:', err);
           }
         }
-      } catch (err) {
-        console.warn('Error fetching lesson:', err);
+
+        // 2. Fetch all sibling lessons for the topic
+        let siblings: MobileLesson[] = [];
+        if (params.topicId) {
+          try {
+            const fetchedSiblings = await lessonService.getLessonsByTopic(params.topicId);
+            if (Array.isArray(fetchedSiblings)) {
+              siblings = fetchedSiblings;
+            }
+          } catch (e) {
+            console.warn('Error fetching topic siblings:', e);
+          }
+        }
+
+        // 3. Fallback: If no lesson was loaded by params.id (or params.id wasn't provided), pick the first lesson of this topic
+        if (!currentLessonData && siblings.length > 0) {
+          currentLessonData = siblings[0];
+        }
+
+        if (isMounted) {
+          if (currentLessonData) {
+            setLesson(currentLessonData);
+            if (currentLessonData.audioUrl) {
+              setTtsAudioUrl(currentLessonData.audioUrl);
+            }
+            if (currentLessonData.voiceNoteUrl) {
+              setTeacherAudioUrl(currentLessonData.voiceNoteUrl);
+            }
+          }
+          if (siblings.length > 0) {
+            setTopicLessons(siblings);
+          }
+        }
+
+        // 4. Fetch lesson quizzes
+        try {
+          const effectiveLessonId = currentLessonData?._id || params.id;
+          let found: MobileQuiz[] = [];
+          if (effectiveLessonId) {
+            found = await quizService.getQuizzesByLesson(effectiveLessonId);
+          }
+          if ((!found || found.length === 0) && params.topicId) {
+            found = await quizService.getQuizzesByTopic(params.topicId);
+          }
+          if (isMounted) {
+            setLessonQuizzes(Array.isArray(found) ? found : []);
+          }
+        } catch (e) {
+          console.warn('Error fetching lesson quizzes:', e);
+        }
       } finally {
         if (isMounted) setIsLoadingLesson(false);
       }
     };
 
-    const fetchTopicSiblings = async () => {
-      if (!params.topicId) return;
-      try {
-        const siblings = await lessonService.getLessonsByTopic(params.topicId);
-        if (isMounted && Array.isArray(siblings)) {
-          setTopicLessons(siblings);
-        }
-      } catch (e) {
-        console.warn('Error fetching topic siblings:', e);
-      }
-    };
-
-    fetchLesson();
-    fetchTopicSiblings();
+    fetchLessonData();
 
     return () => {
       isMounted = false;
@@ -100,7 +198,7 @@ export default function LessonScreen() {
     const checkAccess = async () => {
       try {
         const { subscriptionService } = await import('@/services/subscription.service');
-        const access = await subscriptionService.checkAccess(params.topicId, params.id);
+        const access = await subscriptionService.checkAccess(params.topicId, params.id, selectedClass);
         if (!access.canAccess) {
           router.replace('/premium-access');
         }
@@ -109,86 +207,151 @@ export default function LessonScreen() {
       }
     };
     checkAccess();
-  }, [params.topicId, params.id]);
+  }, [params.topicId, params.id, selectedClass]);
 
-  // Keep player source synchronized with activeAudioUrl
-  useEffect(() => {
-    if (activeAudioUrl && player) {
-      try {
-        player.replace({ uri: activeAudioUrl });
-      } catch {}
-    }
-  }, [activeAudioUrl, player]);
+  // TTS Narrator player states
+  const isTtsPlaying = ttsStatus.playing;
+  const isTtsBuffering = ttsStatus.isBuffering;
+  const ttsCurrentSec = ttsStatus.currentTime || 0;
+  const ttsDurationSec = ttsStatus.duration || (lesson?.audioDuration || 0);
 
-  const isPlaying = status.playing;
-  const isBuffering = status.isBuffering;
-  const currentTimeSec = status.currentTime || 0;
-  const durationSec = status.duration || (lesson?.audioDuration || lesson?.voiceNoteDuration || 0);
+  // Teacher's Explanation player states
+  const isTeacherPlaying = teacherStatus.playing;
+  const isTeacherBuffering = teacherStatus.isBuffering;
+  const teacherCurrentSec = teacherStatus.currentTime || 0;
+  const teacherDurationSec = teacherStatus.duration || (lesson?.voiceNoteDuration || 0);
 
-  const handlePlayPause = async () => {
+  const handleTtsPlayPause = async (forceVoice?: VoiceOption) => {
     try {
-      if (player.playing) {
-        player.pause();
+      // Pause teacher player if currently active
+      if (teacherPlayer?.playing) {
+        teacherPlayer.pause();
+      }
+
+      if (ttsPlayer.playing && !forceVoice) {
+        ttsPlayer.pause();
         return;
       }
 
-      // If already has audio url and loaded
-      if (activeAudioUrl) {
-        player.play();
+      const voiceToUse = forceVoice || selectedVoice;
+
+      // If active audio is already loaded and no new voice requested
+      if (ttsAudioUrl && !forceVoice) {
+        ttsPlayer.play();
         return;
       }
 
-      // If no audio url is generated yet, synthesize on-the-fly using TTS (ttsmp3.com / Google TTS)
+      // Synthesize on-the-fly using the student's selected voice
       if (lessonContent || lessonTitle) {
         setIsSynthesizing(true);
-        const textToSpeak = `${lessonTitle}. ${lessonContent.replace(/<[^>]+>/g, ' ').slice(0, 500)}`;
-        const res = await lessonService.synthesizeSpeech(textToSpeak, lesson?.audioVoice || 'en-GB-Neural2-A');
+        const textToSpeak = `${lessonTitle}. ${lessonContent.replace(/<[^>]+>/g, ' ').slice(0, 1500)}`;
+        const res = await lessonService.synthesizeSpeech(textToSpeak, voiceToUse.id);
         if (res && res.audioUrl) {
-          setActiveAudioUrl(res.audioUrl);
-          if (player) {
-            player.replace({ uri: res.audioUrl });
-            player.play();
+          setTtsAudioUrl(res.audioUrl);
+          if (ttsPlayer) {
+            try {
+              ttsPlayer.replace({ uri: res.audioUrl });
+              ttsPlayer.play();
+            } catch (pErr) {
+              console.warn('Native player play error:', pErr);
+            }
           }
           return;
         }
       }
 
-      Alert.alert('Audio Notice', 'No audio or lesson text is available to play.');
+      Alert.alert('Audio Notice', 'No lesson text is available to synthesize.');
     } catch (err: any) {
-      console.error('Audio playback/synthesis error:', err);
+      console.error('TTS playback/synthesis error:', err);
       const detail = err?.message || 'Could not stream audio narration at the moment.';
-      Alert.alert(
-        'Audio Notice',
-        `${detail} Please verify your server connection.`
-      );
+      Alert.alert('Audio Notice', `${detail} Please verify your connection.`);
     } finally {
       setIsSynthesizing(false);
     }
   };
 
-  const handleSkip = (deltaSeconds: number) => {
-    if (!player) return;
+  const handleSelectVoice = async (voice: VoiceOption) => {
+    setSelectedVoice(voice);
+    setShowVoiceModal(false);
+    await storageService.setPreferredVoice(voice.id);
+    handleTtsPlayPause(voice);
+  };
+
+  const handleTtsSkip = (deltaSeconds: number) => {
+    if (!ttsPlayer) return;
     try {
-      const targetSec = Math.max(0, Math.min(currentTimeSec + deltaSeconds, durationSec || 9999));
-      player.seekTo(targetSec);
+      const targetSec = Math.max(0, Math.min(ttsCurrentSec + deltaSeconds, ttsDurationSec || 9999));
+      ttsPlayer.seekTo(targetSec);
     } catch (e) {
-      console.warn('Error skipping audio:', e);
+      console.warn('Error skipping TTS audio:', e);
     }
   };
 
-  const toggleSpeed = () => {
+  const toggleTtsSpeed = () => {
     const speeds = [1.0, 1.25, 1.5];
-    const nextIdx = (speeds.indexOf(playbackSpeed) + 1) % speeds.length;
+    const nextIdx = (speeds.indexOf(ttsSpeed) + 1) % speeds.length;
     const newSpeed = speeds[nextIdx];
-    setPlaybackSpeed(newSpeed);
+    setTtsSpeed(newSpeed);
 
-    if (player) {
+    if (ttsPlayer) {
       try {
-        if (typeof (player as any).setPlaybackRate === 'function') {
-          (player as any).setPlaybackRate(newSpeed);
+        if (typeof (ttsPlayer as any).setPlaybackRate === 'function') {
+          (ttsPlayer as any).setPlaybackRate(newSpeed);
         }
       } catch (e) {
-        console.warn('Error setting audio playback speed:', e);
+        console.warn('Error setting TTS playback speed:', e);
+      }
+    }
+  };
+
+  // Teacher Player Handlers
+  const handleTeacherPlayPause = async () => {
+    try {
+      // Pause TTS player if active
+      if (ttsPlayer?.playing) {
+        ttsPlayer.pause();
+      }
+
+      if (teacherPlayer.playing) {
+        teacherPlayer.pause();
+        return;
+      }
+
+      if (teacherAudioUrl) {
+        teacherPlayer.play();
+        return;
+      }
+
+      Alert.alert("Teacher's Explanation", 'No recorded teacher explanation has been uploaded for this lesson yet.');
+    } catch (err: any) {
+      console.error('Teacher audio playback error:', err);
+      Alert.alert("Teacher's Explanation", 'Could not play teacher audio at the moment.');
+    }
+  };
+
+  const handleTeacherSkip = (deltaSeconds: number) => {
+    if (!teacherPlayer) return;
+    try {
+      const targetSec = Math.max(0, Math.min(teacherCurrentSec + deltaSeconds, teacherDurationSec || 9999));
+      teacherPlayer.seekTo(targetSec);
+    } catch (e) {
+      console.warn('Error skipping teacher audio:', e);
+    }
+  };
+
+  const toggleTeacherSpeed = () => {
+    const speeds = [1.0, 1.25, 1.5];
+    const nextIdx = (speeds.indexOf(teacherSpeed) + 1) % speeds.length;
+    const newSpeed = speeds[nextIdx];
+    setTeacherSpeed(newSpeed);
+
+    if (teacherPlayer) {
+      try {
+        if (typeof (teacherPlayer as any).setPlaybackRate === 'function') {
+          (teacherPlayer as any).setPlaybackRate(newSpeed);
+        }
+      } catch (e) {
+        console.warn('Error setting teacher playback speed:', e);
       }
     }
   };
@@ -200,7 +363,8 @@ export default function LessonScreen() {
     return `${mins}:${remainingSecs < 10 ? '0' : ''}${remainingSecs}`;
   };
 
-  const progressPercent = durationSec > 0 ? (currentTimeSec / durationSec) * 100 : 0;
+  const ttsProgressPercent = ttsDurationSec > 0 ? (ttsCurrentSec / ttsDurationSec) * 100 : 0;
+  const teacherProgressPercent = teacherDurationSec > 0 ? (teacherCurrentSec / teacherDurationSec) * 100 : 0;
 
   // Calculate lesson sequence (e.g. Lesson 1 of 3, 33% Complete)
   const currentIdx = Math.max(
@@ -250,56 +414,77 @@ export default function LessonScreen() {
           </View>
         )}
 
-        {/* Breadcrumb / Category Tag */}
-        <View style={[styles.tagContainer, { backgroundColor: '#E6F7F5' }]}>
-          <Text style={[styles.tagText, { color: colors.primary }]}>{subjectName}</Text>
-        </View>
-
-        {/* Lesson Title */}
-        <Text style={[styles.title, { color: colors.text }]}>{lessonTitle}</Text>
-
-        {/* AI Read Aloud Bar (matching reference mockup) */}
-        <TouchableOpacity
-          style={[styles.aiReadAloudCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          onPress={handlePlayPause}
-          disabled={isSynthesizing}
-          activeOpacity={0.8}
-        >
-          <View style={[styles.aiMicCircle, { backgroundColor: '#E6F7F5' }]}>
-            {isSynthesizing ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <Ionicons name={isPlaying ? 'volume-high' : 'mic-outline'} size={20} color={colors.primary} />
-            )}
+        {/* Lesson Top Details Section with Border Line */}
+        <View style={[styles.topDetailsSection, { borderBottomColor: colors.border }]}>
+          {/* Breadcrumb / Category Tag */}
+          <View style={[styles.tagContainer, { backgroundColor: '#E6F7F5' }]}>
+            <Text style={[styles.tagText, { color: colors.primary }]}>{subjectName}</Text>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.aiReadAloudTitle, { color: colors.text }]}>AI Read Aloud</Text>
-            <Text style={[styles.aiReadAloudSubtitle, { color: colors.textSecondary }]}>
-              {isSynthesizing
-                ? 'Generating voice narration...'
-                : isPlaying
-                ? 'Playing audio narration...'
-                : 'Tap to hear this lesson read aloud.'}
+
+          {/* Lesson Title */}
+          <Text style={[styles.title, { color: colors.text }]}>{lessonTitle}</Text>
+
+          {/* AI Read Aloud Bar with Voice Selection */}
+          <View style={[styles.aiReadAloudCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}
+              onPress={() => handleTtsPlayPause()}
+              disabled={isSynthesizing}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.aiMicCircle, { backgroundColor: '#E6F7F5' }]}>
+                {isSynthesizing ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Ionicons name={isTtsPlaying ? 'volume-high' : 'mic-outline'} size={20} color={colors.primary} />
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={[styles.aiReadAloudTitle, { color: colors.text }]}>AI Narrator (TTS)</Text>
+                  {isTtsPlaying && (
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary }} />
+                  )}
+                </View>
+                <Text style={[styles.aiReadAloudSubtitle, { color: colors.textSecondary }]}>
+                  {isSynthesizing
+                    ? 'Generating voice narration...'
+                    : isTtsPlaying
+                    ? `Narrating in ${selectedVoice.label}...`
+                    : `Tap to play narration • Voice: ${selectedVoice.label}`}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Voice Accent Switcher Button */}
+            <TouchableOpacity
+              style={[styles.voiceSwitchBtn, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
+              onPress={() => setShowVoiceModal(true)}
+              activeOpacity={0.75}
+            >
+              <Text style={{ fontSize: 13 }}>{selectedVoice.flag}</Text>
+              <Text style={[styles.voiceSwitchBtnText, { color: colors.primary }]}>{selectedVoice.name}</Text>
+              <Ionicons name="chevron-down" size={14} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Lesson Progress Counter & Bar (e.g. "Lesson 1 of 3   33% Complete") */}
+          <View style={styles.lessonProgressHeader}>
+            <Text style={[styles.lessonProgressCount, { color: colors.textSecondary }]}>
+              Lesson {currentIdx + 1} of {totalTopicLessons}
+            </Text>
+            <Text style={[styles.lessonProgressPercent, { color: colors.primary }]}>
+              {Math.round(calculatedProgressPercent)}% Complete
             </Text>
           </View>
-        </TouchableOpacity>
-
-        {/* Lesson Progress Counter & Bar (e.g. "Lesson 1 of 3   33% Complete") */}
-        <View style={styles.lessonProgressHeader}>
-          <Text style={[styles.lessonProgressCount, { color: colors.textSecondary }]}>
-            Lesson {currentIdx + 1} of {totalTopicLessons}
-          </Text>
-          <Text style={[styles.lessonProgressPercent, { color: colors.primary }]}>
-            {Math.round(calculatedProgressPercent)}% Complete
-          </Text>
-        </View>
-        <View style={[styles.lessonProgressBarBg, { backgroundColor: colors.surfaceAlt }]}>
-          <View
-            style={[
-              styles.lessonProgressBarFill,
-              { width: `${Math.max(8, Math.min(100, calculatedProgressPercent))}%`, backgroundColor: colors.primary },
-            ]}
-          />
+          <View style={[styles.lessonProgressBarBg, { backgroundColor: colors.surfaceAlt, marginBottom: 0 }]}>
+            <View
+              style={[
+                styles.lessonProgressBarFill,
+                { width: `${Math.max(8, Math.min(100, calculatedProgressPercent))}%`, backgroundColor: colors.primary },
+              ]}
+            />
+          </View>
         </View>
 
         {/* Learning Objectives if uploaded by Admin (comes BEFORE lesson content) */}
@@ -320,9 +505,37 @@ export default function LessonScreen() {
           </View>
         )}
 
-        {/* Lesson Content Body - seamlessly integrated with same UI, transparent without extra border or contrasting background */}
+        {/* Lesson Outlines / Agenda if available */}
+        {Array.isArray(lesson?.outlines) && lesson.outlines.filter((o) => typeof o === 'string' && o.trim().length > 0).length > 0 && (
+          <View style={[styles.metaBlockCard, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: -8 }]}>
+            <View style={styles.metaBlockHeader}>
+              <Ionicons name="list-outline" size={18} color="#0D6D62" />
+              <Text style={[styles.metaBlockTitle, { color: colors.text }]}>Lesson Outline & Flow</Text>
+            </View>
+            {lesson.outlines
+              .filter((outl) => typeof outl === 'string' && outl.trim().length > 0)
+              .map((outl, i) => (
+                <View key={i} style={styles.metaRow}>
+                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#E6F7F5', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>{i + 1}</Text>
+                  </View>
+                  <Text style={[styles.metaText, { color: colors.textSecondary, flex: 1 }]}>{outl}</Text>
+                </View>
+              ))}
+          </View>
+        )}
+
+        {/* Lesson Content Body with Border Line */}
         {lessonContent ? (
-          <View style={styles.naturalContentWrapper}>
+          <View
+            style={[
+              styles.naturalContentWrapper,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+            ]}
+          >
             <MathView
               content={lessonContent}
               fontSize={15}
@@ -332,47 +545,63 @@ export default function LessonScreen() {
           </View>
         ) : !isLoadingLesson ? null : null}
 
-        {/* Teacher's Explanation Audio Media Player (Matching Mockup with complete controls) */}
-        <View style={[styles.teacherPlayerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.teacherPlayerTitle, { color: colors.text }]}>Teacher's Explanation</Text>
+        {/* 1. AI Narrator TTS Audio Media Card */}
+        <View style={[styles.teacherPlayerCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 16 }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="volume-high" size={18} color={colors.primary} />
+              <Text style={[styles.teacherPlayerTitle, { color: colors.text, marginBottom: 0 }]}>
+                AI Narrator Audio
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.voiceSwitchBtn, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
+              onPress={() => setShowVoiceModal(true)}
+              activeOpacity={0.75}
+            >
+              <Text style={{ fontSize: 13 }}>{selectedVoice.flag}</Text>
+              <Text style={[styles.voiceSwitchBtnText, { color: colors.primary }]}>{selectedVoice.name}</Text>
+              <Ionicons name="chevron-down" size={14} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
 
-          {/* Player Main Controls Row */}
+          {/* TTS Player Main Controls Row */}
           <View style={styles.teacherControlsRow}>
-            {/* Speed / Reset button (Left icon) */}
+            {/* Speed Toggle */}
             <TouchableOpacity
               style={styles.teacherSideIconBtn}
-              onPress={toggleSpeed}
+              onPress={toggleTtsSpeed}
               activeOpacity={0.7}
             >
               <Ionicons name="speedometer-outline" size={22} color={colors.primary} />
               <Text style={{ fontSize: 9, fontWeight: '700', color: colors.primary, marginTop: 1 }}>
-                {playbackSpeed}x
+                {ttsSpeed}x
               </Text>
             </TouchableOpacity>
 
-            {/* Main Play / Pause Circle (Center) */}
+            {/* TTS Main Play / Pause Circle */}
             <TouchableOpacity
               style={[styles.teacherPlayBtn, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
-              onPress={handlePlayPause}
-              disabled={isBuffering || isSynthesizing}
+              onPress={() => handleTtsPlayPause()}
+              disabled={isTtsBuffering || isSynthesizing}
               activeOpacity={0.85}
             >
-              {isBuffering || isSynthesizing ? (
+              {isTtsBuffering || isSynthesizing ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <Ionicons
-                  name={isPlaying ? 'pause' : 'play'}
+                  name={isTtsPlaying ? 'pause' : 'play'}
                   size={26}
                   color="#FFFFFF"
-                  style={{ marginLeft: isPlaying ? 0 : 2 }}
+                  style={{ marginLeft: isTtsPlaying ? 0 : 2 }}
                 />
               )}
             </TouchableOpacity>
 
-            {/* Skip 15s forward (Right icon) */}
+            {/* Skip 15s forward */}
             <TouchableOpacity
               style={styles.teacherSideIconBtn}
-              onPress={() => handleSkip(15)}
+              onPress={() => handleTtsSkip(15)}
               activeOpacity={0.7}
             >
               <Ionicons name="play-forward" size={22} color={colors.primary} />
@@ -382,16 +611,15 @@ export default function LessonScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Interactive Audio Scrubber Bar */}
+          {/* TTS Audio Scrubber Bar */}
           <TouchableOpacity
             style={styles.teacherScrubberTrack}
             activeOpacity={0.8}
             onPress={(e) => {
               const { locationX } = e.nativeEvent;
-              // Assuming standard container width approx 300px, seek proportionally
-              if (durationSec > 0 && player) {
+              if (ttsDurationSec > 0 && ttsPlayer) {
                 const ratio = Math.max(0, Math.min(1, locationX / 280));
-                handleSkip((ratio * durationSec) - currentTimeSec);
+                handleTtsSkip((ratio * ttsDurationSec) - ttsCurrentSec);
               }
             }}
           >
@@ -399,19 +627,107 @@ export default function LessonScreen() {
               <View
                 style={[
                   styles.teacherScrubberFill,
-                  { width: `${Math.min(100, Math.max(0, progressPercent))}%`, backgroundColor: colors.primary },
+                  { width: `${Math.min(100, Math.max(0, ttsProgressPercent))}%`, backgroundColor: colors.primary },
                 ]}
               />
             </View>
           </TouchableOpacity>
 
-          {/* Audio Timers Row (Current time & Duration) */}
+          {/* Audio Timers Row */}
           <View style={styles.teacherTimeRow}>
             <Text style={[styles.teacherTimeText, { color: colors.textSecondary }]}>
-              {formatTime(currentTimeSec)}
+              {formatTime(ttsCurrentSec)}
             </Text>
             <Text style={[styles.teacherTimeText, { color: colors.textSecondary }]}>
-              {durationSec > 0 ? formatTime(durationSec) : (lesson?.duration || '8:15')}
+              {ttsDurationSec > 0 ? formatTime(ttsDurationSec) : (lesson?.duration || '10:00')}
+            </Text>
+          </View>
+        </View>
+
+        {/* 2. Teacher's Explanation Audio Media Player (Separate Card Below TTS) */}
+        <View style={[styles.teacherPlayerCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 20 }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+            <Ionicons name="mic-outline" size={18} color="#D97706" />
+            <Text style={[styles.teacherPlayerTitle, { color: colors.text, marginBottom: 0 }]}>
+              Teacher's Explanation
+            </Text>
+          </View>
+
+          {/* Teacher Player Main Controls Row */}
+          <View style={styles.teacherControlsRow}>
+            {/* Speed Toggle */}
+            <TouchableOpacity
+              style={styles.teacherSideIconBtn}
+              onPress={toggleTeacherSpeed}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="speedometer-outline" size={22} color="#D97706" />
+              <Text style={{ fontSize: 9, fontWeight: '700', color: '#D97706', marginTop: 1 }}>
+                {teacherSpeed}x
+              </Text>
+            </TouchableOpacity>
+
+            {/* Teacher Main Play / Pause Circle */}
+            <TouchableOpacity
+              style={[styles.teacherPlayBtn, { backgroundColor: '#D97706', shadowColor: '#D97706' }]}
+              onPress={handleTeacherPlayPause}
+              disabled={isTeacherBuffering}
+              activeOpacity={0.85}
+            >
+              {isTeacherBuffering ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Ionicons
+                  name={isTeacherPlaying ? 'pause' : 'play'}
+                  size={26}
+                  color="#FFFFFF"
+                  style={{ marginLeft: isTeacherPlaying ? 0 : 2 }}
+                />
+              )}
+            </TouchableOpacity>
+
+            {/* Skip 15s forward */}
+            <TouchableOpacity
+              style={styles.teacherSideIconBtn}
+              onPress={() => handleTeacherSkip(15)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="play-forward" size={22} color="#D97706" />
+              <Text style={{ fontSize: 9, fontWeight: '700', color: '#D97706', marginTop: 1 }}>
+                +15s
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Teacher Interactive Audio Scrubber Bar */}
+          <TouchableOpacity
+            style={styles.teacherScrubberTrack}
+            activeOpacity={0.8}
+            onPress={(e) => {
+              const { locationX } = e.nativeEvent;
+              if (teacherDurationSec > 0 && teacherPlayer) {
+                const ratio = Math.max(0, Math.min(1, locationX / 280));
+                handleTeacherSkip((ratio * teacherDurationSec) - teacherCurrentSec);
+              }
+            }}
+          >
+            <View style={[styles.teacherScrubberBg, { backgroundColor: colors.surfaceAlt }]}>
+              <View
+                style={[
+                  styles.teacherScrubberFill,
+                  { width: `${Math.min(100, Math.max(0, teacherProgressPercent))}%`, backgroundColor: '#D97706' },
+                ]}
+              />
+            </View>
+          </TouchableOpacity>
+
+          {/* Audio Timers Row */}
+          <View style={styles.teacherTimeRow}>
+            <Text style={[styles.teacherTimeText, { color: colors.textSecondary }]}>
+              {formatTime(teacherCurrentSec)}
+            </Text>
+            <Text style={[styles.teacherTimeText, { color: colors.textSecondary }]}>
+              {teacherDurationSec > 0 ? formatTime(teacherDurationSec) : (lesson?.duration || '8:15')}
             </Text>
           </View>
         </View>
@@ -432,85 +748,127 @@ export default function LessonScreen() {
           </View>
         )}
 
-        {/* Attached Exercises / Quizzes Card */}
-        {Array.isArray(lesson?.exercises) && lesson.exercises.length > 0 && (
-          <View style={[styles.cleanContentCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 20 }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Ionicons name="help-circle-outline" size={18} color={colors.primary} />
-                <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>
-                  Practice Exercises & Quizzes
-                </Text>
-              </View>
-              <View style={{ backgroundColor: colors.primaryMint, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 }}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
-                  {lesson.exercises.length} Attached
-                </Text>
-              </View>
+        {/* Practice Exercises & Quizzes Section */}
+        <View style={[styles.cleanContentCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 20 }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
+              <Ionicons name="help-circle-outline" size={18} color={colors.primary} />
+              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text, flexShrink: 1 }}>
+                Practice Exercises & Quizzes
+              </Text>
             </View>
+            <View
+              style={{
+                backgroundColor: colors.primaryMint,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                borderRadius: 12,
+                alignSelf: 'flex-start',
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: '700',
+                  color: colors.primary,
+                  includeFontPadding: false,
+                }}
+              >
+                {Math.max(
+                  lessonQuizzes.length,
+                  Array.isArray(lesson?.exercises) ? lesson.exercises.length : 0,
+                  1
+                )}{' '}
+                {Math.max(
+                  lessonQuizzes.length,
+                  Array.isArray(lesson?.exercises) ? lesson.exercises.length : 0,
+                  1
+                ) > 1
+                  ? 'Quiz Exercises'
+                  : 'Quiz Exercise'}
+              </Text>
+            </View>
+          </View>
 
-            <View style={{ gap: 8 }}>
-              {lesson.exercises.map((ex: any, idx: number) => {
-                const exId = ex?._id || ex;
-                const exTitle = ex?.title || `Exercise #${idx + 1}`;
-                const qCount = ex?.questions?.length || 0;
+          <Text style={{ fontSize: 13, lineHeight: 19, color: colors.textSecondary, marginBottom: 14 }}>
+            Please complete the quiz exercise for this lesson to test your understanding before advancing to the next lesson.
+          </Text>
 
-                return (
-                  <TouchableOpacity
-                    key={exId || idx}
+          <View style={{ gap: 8 }}>
+            {(lessonQuizzes.length > 0
+              ? lessonQuizzes
+              : Array.isArray(lesson?.exercises) && lesson.exercises.length > 0
+              ? lesson.exercises
+              : [
+                  {
+                    _id: undefined,
+                    title: `${lessonTitle} Quiz Exercise`,
+                    questions: [],
+                  },
+                ]
+            ).map((ex: any, idx: number) => {
+              const exId = typeof ex === 'object' ? ex?._id : ex;
+              const exTitle = (typeof ex === 'object' && ex?.title) || `${lessonTitle} Quiz Exercise`;
+              const qCount = (typeof ex === 'object' && ex?.questions?.length) || 0;
+
+              return (
+                <TouchableOpacity
+                  key={exId || idx}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: 12,
+                    borderRadius: 12,
+                    backgroundColor: colors.surfaceAlt,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                  }}
+                  onPress={() => {
+                    router.push({
+                      pathname: '/quiz',
+                      params: {
+                        topicId: params.topicId,
+                        lessonId: params.id || lesson?._id,
+                        quizId: typeof exId === 'string' ? exId : undefined,
+                        title: exTitle,
+                        subjectName,
+                        nextLessonId: nextLesson?._id || '',
+                        nextLessonTitle: nextLesson?.title || '',
+                      },
+                    });
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }} numberOfLines={1}>
+                      {exTitle}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                      {qCount > 0 ? `${qCount} Questions (Q1 – Q${qCount}) • ` : ''}Lesson Quiz Exercise
+                    </Text>
+                  </View>
+                  <View
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: 12,
-                      borderRadius: 12,
-                      backgroundColor: colors.surfaceAlt,
-                      borderWidth: 1,
-                      borderColor: colors.border,
+                      gap: 4,
+                      backgroundColor: colors.primary,
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 8,
                     }}
-                    onPress={() => {
-                      router.push({
-                        pathname: '/quiz',
-                        params: {
-                          topicId: params.topicId,
-                          lessonId: params.id,
-                          quizId: typeof exId === 'string' ? exId : undefined,
-                          title: exTitle,
-                        },
-                      });
-                    }}
-                    activeOpacity={0.7}
                   >
-                    <View style={{ flex: 1, paddingRight: 8 }}>
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }} numberOfLines={1}>
-                        {exTitle}
-                      </Text>
-                      <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
-                        {qCount > 0 ? `${qCount} Questions • ` : ''}Practice Quiz
-                      </Text>
-                    </View>
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 4,
-                        backgroundColor: colors.primary,
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                        borderRadius: 8,
-                      }}
-                    >
-                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#FFFFFF' }}>Start</Text>
-                      <Ionicons name="arrow-forward" size={12} color="#FFFFFF" />
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#FFFFFF' }}>Take Quiz</Text>
+                    <Ionicons name="arrow-forward" size={12} color="#FFFFFF" />
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </View>
-        )}
+        </View>
 
-        {/* Previous Lesson / Next Lesson Navigation Buttons (Matching Mockup) */}
+        {/* Previous Lesson / Take Quiz Navigation Buttons */}
         <View style={styles.navRow}>
           <TouchableOpacity
             style={[
@@ -558,38 +916,97 @@ export default function LessonScreen() {
           <TouchableOpacity
             style={[
               styles.navBtn,
-              styles.navBtnActiveOutline,
-              { borderColor: colors.primary },
+              { backgroundColor: colors.primary, borderColor: colors.primary },
             ]}
             onPress={() => {
-              if (nextLesson) {
-                router.replace({
-                  pathname: '/lesson',
-                  params: {
-                    id: nextLesson._id,
-                    title: nextLesson.title,
-                    subject: subjectName,
-                    topicId: params.topicId,
-                  },
-                });
-              } else {
-                router.push({
-                  pathname: '/quiz',
-                  params: {
-                    topicId: params.topicId,
-                    lessonId: params.id,
-                    title: `${lessonTitle} Assessment`,
-                  },
-                });
-              }
+              const firstQuizId =
+                lessonQuizzes[0]?._id ||
+                (Array.isArray(lesson?.exercises) && lesson.exercises[0]
+                  ? typeof lesson.exercises[0] === 'object'
+                    ? (lesson.exercises[0] as any)._id
+                    : lesson.exercises[0]
+                  : undefined);
+              router.push({
+                pathname: '/quiz',
+                params: {
+                  topicId: params.topicId,
+                  lessonId: params.id || lesson?._id,
+                  quizId: typeof firstQuizId === 'string' ? firstQuizId : undefined,
+                  title: lessonQuizzes[0]?.title || `${lessonTitle} Quiz Exercise`,
+                  subjectName,
+                  nextLessonId: nextLesson?._id || '',
+                  nextLessonTitle: nextLesson?.title || '',
+                },
+              });
             }}
           >
-            <Text style={[styles.navBtnText, { color: colors.primary, fontWeight: '700' }]}>
-              {nextLesson ? 'Next Lesson' : 'Take Quiz'}
+            <Text style={[styles.navBtnText, { color: '#FFFFFF', fontWeight: '700' }]}>
+              Take Quiz
             </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Voice Selection Modal */}
+      <Modal
+        visible={showVoiceModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowVoiceModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowVoiceModal(false)}
+        >
+          <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>Choose Preferred Voice</Text>
+                <Text style={[styles.modalSub, { color: colors.textSecondary }]}>
+                  Select your preferred voice for lesson audio narration
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowVoiceModal(false)} style={{ padding: 4 }}>
+                <Ionicons name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
+              {STUDENT_VOICES.map((v) => {
+                const isSelected = v.id === selectedVoice.id;
+                return (
+                  <TouchableOpacity
+                    key={v.id}
+                    style={[
+                      styles.voiceItemCard,
+                      {
+                        backgroundColor: isSelected ? colors.cardHighlightBg : colors.surfaceAlt,
+                        borderColor: isSelected ? colors.primary : colors.border,
+                      },
+                    ]}
+                    onPress={() => handleSelectVoice(v)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={{ fontSize: 24, marginRight: 12 }}>{v.flag}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.voiceItemName, { color: colors.text }]}>{v.label}</Text>
+                      <Text style={[styles.voiceItemSub, { color: colors.textSecondary }]}>
+                        {v.accent} • {v.gender === 'FEMALE' ? 'Female' : 'Male'} Voice
+                      </Text>
+                    </View>
+                    {isSelected ? (
+                      <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
+                    ) : (
+                      <View style={[styles.radioCircle, { borderColor: colors.border }]} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -681,6 +1098,71 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
+  voiceSwitchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 4,
+  },
+  voiceSwitchBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  modalCard: {
+    width: '100%',
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  modalSub: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  voiceItemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    marginBottom: 10,
+  },
+  voiceItemName: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  voiceItemSub: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  radioCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+  },
   /* Reference Mockup: Lesson Progress Counter & Bar */
   lessonProgressHeader: {
     flexDirection: 'row',
@@ -706,10 +1188,18 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
   },
+  topDetailsSection: {
+    borderBottomWidth: 1,
+    paddingBottom: 18,
+    marginBottom: 20,
+  },
   naturalContentWrapper: {
     width: '100%',
     marginBottom: 20,
-    paddingHorizontal: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderWidth: 1,
+    borderRadius: 16,
   },
   /* Reference Mockup: Enhanced Clean Content Card */
   cleanContentCard: {

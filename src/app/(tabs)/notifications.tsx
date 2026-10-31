@@ -1,10 +1,11 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Modal } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { studentDashboardService, AnnouncementItem } from '@/services/dashboard.service';
+import { storageService } from '@/services/storage.service';
 import { useAppTheme } from '@/hooks/useAppTheme';
 
 interface NotificationItem {
@@ -26,6 +27,9 @@ export default function NotificationsScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // Selected announcement for detail view modal
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<NotificationItem | null>(null);
+
   const formatTimeAgo = (dateStr?: string) => {
     if (!dateStr) return 'Recently';
     const date = new Date(dateStr);
@@ -41,20 +45,29 @@ export default function NotificationsScreen() {
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const announcements = await studentDashboardService.getAnnouncements();
+      const [announcements, readIds] = await Promise.all([
+        studentDashboardService.getAnnouncements(),
+        storageService.getReadAnnouncementIds(),
+      ]);
+
+      const readSet = new Set(readIds || []);
 
       if (Array.isArray(announcements) && announcements.length > 0) {
-        const mapped: NotificationItem[] = announcements.map((item, idx) => ({
-          id: item._id || String(idx),
-          title: item.title,
-          time: formatTimeAgo(item.createdAt),
-          content: item.content,
-          icon: item.pinned ? 'alert-circle-outline' : 'megaphone-outline',
-          color: item.pinned ? '#FEE2E2' : '#DBEAFE',
-          unread: idx < 2,
-          audience: item.audience || 'All Students',
-          authorName: item.authorName || 'School Administrator',
-        }));
+        const mapped: NotificationItem[] = announcements.map((item, idx) => {
+          const itemId = item._id || String(idx);
+          const isUnread = !readSet.has(itemId);
+          return {
+            id: itemId,
+            title: item.title,
+            time: formatTimeAgo(item.createdAt),
+            content: item.content,
+            icon: item.pinned ? 'alert-circle-outline' : 'megaphone-outline',
+            color: item.pinned ? '#FEE2E2' : '#DBEAFE',
+            unread: isUnread,
+            audience: item.audience || 'All Students',
+            authorName: item.authorName || 'School Administrator',
+          };
+        });
         setNotifications(mapped);
         setUnreadCount(mapped.filter((n) => n.unread).length);
       } else {
@@ -79,9 +92,22 @@ export default function NotificationsScreen() {
     fetchNotifications();
   };
 
-  const handleMarkAllRead = () => {
+  const handleMarkAllRead = async () => {
+    const allIds = notifications.map((n) => n.id);
+    await storageService.markAllAnnouncementsAsRead(allIds);
     setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
     setUnreadCount(0);
+  };
+
+  const handleViewAnnouncement = async (item: NotificationItem) => {
+    setSelectedAnnouncement(item);
+    if (item.unread) {
+      await storageService.markAnnouncementAsRead(item.id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === item.id ? { ...n, unread: false } : n))
+      );
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    }
   };
 
   return (
@@ -110,7 +136,7 @@ export default function NotificationsScreen() {
             </Text>
           )}
         </View>
-        {notifications.length > 0 && (
+        {notifications.length > 0 && unreadCount > 0 && (
           <TouchableOpacity style={styles.markReadBtn} onPress={handleMarkAllRead}>
             <Text style={[styles.markReadText, { color: colors.primary }]}>Mark all read</Text>
           </TouchableOpacity>
@@ -142,7 +168,7 @@ export default function NotificationsScreen() {
         ) : (
           <View style={styles.listContainer}>
             {notifications.map((item) => (
-              <View
+              <TouchableOpacity
                 key={item.id}
                 style={[
                   styles.notificationCard,
@@ -152,6 +178,8 @@ export default function NotificationsScreen() {
                     borderWidth: item.unread ? 1.5 : 1,
                   },
                 ]}
+                onPress={() => handleViewAnnouncement(item)}
+                activeOpacity={0.75}
               >
                 {item.unread && <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />}
                 
@@ -166,19 +194,86 @@ export default function NotificationsScreen() {
                     </Text>
                     <Text style={[styles.time, { color: colors.textMuted }]}>{item.time}</Text>
                   </View>
-                  <Text style={[styles.content, { color: colors.textSecondary }]}>{item.content}</Text>
-                  {item.authorName && (
-                    <View style={styles.authorRow}>
-                      <Ionicons name="person-circle-outline" size={13} color={colors.primary} />
-                      <Text style={[styles.authorText, { color: colors.primary }]}>{item.authorName}</Text>
-                    </View>
-                  )}
+                  <Text style={[styles.content, { color: colors.textSecondary }]} numberOfLines={2}>
+                    {item.content}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+                    {item.authorName ? (
+                      <View style={styles.authorRow}>
+                        <Ionicons name="person-circle-outline" size={13} color={colors.primary} />
+                        <Text style={[styles.authorText, { color: colors.primary }]}>{item.authorName}</Text>
+                      </View>
+                    ) : null}
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
+                      Tap to read
+                    </Text>
+                  </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
         )}
       </ScrollView>
+
+      {/* Announcement Detail Modal */}
+      <Modal
+        visible={!!selectedAnnouncement}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedAnnouncement(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.modalHeaderRow}>
+              <View style={[styles.modalIconBox, { backgroundColor: selectedAnnouncement?.color || '#DBEAFE' }]}>
+                <Ionicons
+                  name={(selectedAnnouncement?.icon as any) || 'megaphone-outline'}
+                  size={24}
+                  color="#1E293B"
+                />
+              </View>
+              <TouchableOpacity
+                style={[styles.modalCloseBtn, { backgroundColor: colors.surfaceAlt }]}
+                onPress={() => setSelectedAnnouncement(null)}
+              >
+                <Ionicons name="close" size={20} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ marginTop: 12 }}>
+              <Text style={[styles.modalAudienceTag, { color: colors.primary, backgroundColor: colors.primaryMint }]}>
+                {selectedAnnouncement?.audience || 'All Students'}
+              </Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                {selectedAnnouncement?.title}
+              </Text>
+              <View style={styles.modalMetaRow}>
+                <Ionicons name="person-circle-outline" size={14} color={colors.textSecondary} />
+                <Text style={[styles.modalMetaText, { color: colors.textSecondary }]}>
+                  {selectedAnnouncement?.authorName || 'School Administrator'}
+                </Text>
+                <Text style={{ color: colors.textMuted }}>•</Text>
+                <Text style={[styles.modalMetaText, { color: colors.textMuted }]}>
+                  {selectedAnnouncement?.time}
+                </Text>
+              </View>
+            </View>
+
+            <ScrollView style={styles.modalBodyScroll} showsVerticalScrollIndicator={false}>
+              <Text style={[styles.modalBodyText, { color: colors.text }]}>
+                {selectedAnnouncement?.content}
+              </Text>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.modalDismissBtn, { backgroundColor: colors.primary }]}
+              onPress={() => setSelectedAnnouncement(null)}
+            >
+              <Text style={styles.modalDismissText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -329,5 +424,89 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    width: '100%',
+    maxHeight: '80%',
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalAudienceTag: {
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginBottom: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    lineHeight: 24,
+    marginBottom: 6,
+  },
+  modalMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 12,
+  },
+  modalMetaText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  modalBodyScroll: {
+    maxHeight: 220,
+    marginVertical: 12,
+  },
+  modalBodyText: {
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  modalDismissBtn: {
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  modalDismissText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

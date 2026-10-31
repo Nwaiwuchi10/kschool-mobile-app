@@ -13,7 +13,9 @@ export interface SchoolClass {
 export interface UserClassStatus {
   selectedClass: string | null;
   paidClass: string | null;
+  paidClasses?: string[];
   isClassLocked: boolean;
+  isCurrentClassSubscribed?: boolean;
   activeSubscription: any | null;
 }
 
