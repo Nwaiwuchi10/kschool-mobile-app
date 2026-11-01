@@ -32,7 +32,41 @@ export const MathView: React.FC<MathViewProps> = ({
   textStyle,
   inline = false,
 }) => {
-  const [webViewHeight, setWebViewHeight] = useState(inline ? 28 : 120);
+  const [webViewHeight, setWebViewHeight] = useState(inline ? 24 : 80);
+
+  // If content is pure text without HTML tags and without LaTeX, render high-performance native <Text>
+  const hasHtml = /<\/?[a-z][\s\S]*>/i.test(content);
+  const hasLatex =
+    content.includes('$') ||
+    content.includes('\\frac') ||
+    content.includes('\\sqrt') ||
+    content.includes('\\times') ||
+    content.includes('\\text') ||
+    content.includes('\\sum') ||
+    content.includes('\\pm');
+  const hasMarkdownStructure = /^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|```/m.test(content);
+
+  // For inline option cards or simple text questions, render native <Text> directly without WebView overhead
+  if (!hasHtml && !hasLatex && !hasMarkdownStructure) {
+    const cleanText = content.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1');
+    return (
+      <View style={[inline ? { justifyContent: 'center' } : undefined, style]}>
+        <Text
+          style={[
+            {
+              fontSize,
+              color,
+              lineHeight: inline ? Math.round(fontSize * 1.35) : Math.round(fontSize * 1.55),
+              letterSpacing: 0.1,
+            },
+            textStyle,
+          ]}
+        >
+          {cleanText}
+        </Text>
+      </View>
+    );
+  }
 
   // Transform Markdown to rich HTML
   const formattedHtml = useMemo(() => {
@@ -83,12 +117,12 @@ export const MathView: React.FC<MathViewProps> = ({
       overflow-x: hidden;
     }
     #content-container {
-      padding: 4px 2px 14px 2px;
+      padding: ${inline ? '0px' : '4px 2px 14px 2px'};
       width: 100%;
     }
     p {
-      margin: 0 0 14px 0;
-      line-height: 1.65;
+      margin: ${inline ? '0' : '0 0 14px 0'};
+      line-height: ${inline ? '1.35' : '1.65'};
     }
     p:last-child {
       margin-bottom: 0;

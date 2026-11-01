@@ -744,6 +744,7 @@ const styles = StyleSheet.create({
   },
   optionsContainer: {
     gap: 12,
+    width: '100%',
   },
   optionCard: {
     flexDirection: 'row',
@@ -751,8 +752,12 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#E5E7EB',
     borderRadius: 14,
-    padding: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     backgroundColor: '#FFFFFF',
+    minHeight: 56,
+    width: '100%',
+    overflow: 'hidden',
   },
   optionCardActive: {
     borderColor: '#127A71',
