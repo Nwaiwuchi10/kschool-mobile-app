@@ -433,14 +433,9 @@ export default function LessonScreen() {
           {/* Lesson Title */}
           <Text style={[styles.title, { color: colors.text }]}>{lessonTitle}</Text>
 
-          {/* AI Read Aloud Bar with Voice Selection */}
+          {/* AI Narrator (TTS) Static Info Bar */}
           <View style={[styles.aiReadAloudCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}
-              onPress={() => handleTtsPlayPause()}
-              disabled={isSynthesizing}
-              activeOpacity={0.8}
-            >
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}>
               <View style={[styles.aiMicCircle, { backgroundColor: '#E6F7F5' }]}>
                 {isSynthesizing ? (
                   <ActivityIndicator size="small" color={colors.primary} />
@@ -456,16 +451,13 @@ export default function LessonScreen() {
                   )}
                 </View>
                 <Text style={[styles.aiReadAloudSubtitle, { color: colors.textSecondary }]}>
-                  {isSynthesizing
-                    ? 'Generating voice narration...'
-                    : isTtsPlaying
-                    ? `Narrating in ${selectedVoice.label}...`
-                    : `Tap to play narration • Voice: ${selectedVoice.label}`}
+                  Tap to play narration voice
                 </Text>
               </View>
-            </TouchableOpacity>
+            </View>
 
-            {/* Voice Accent Switcher Button */}
+            {/* Commented out dropdown for choose preferred voice */}
+            {/*
             <TouchableOpacity
               style={[styles.voiceSwitchBtn, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
               onPress={() => setShowVoiceModal(true)}
@@ -475,6 +467,7 @@ export default function LessonScreen() {
               <Text style={[styles.voiceSwitchBtnText, { color: colors.primary }]}>{selectedVoice.name}</Text>
               <Ionicons name="chevron-down" size={14} color={colors.primary} />
             </TouchableOpacity>
+            */}
           </View>
 
           {/* Lesson Progress Counter & Bar (e.g. "Lesson 1 of 3   33% Complete") */}
@@ -653,93 +646,95 @@ export default function LessonScreen() {
           </View>
         </View>
 
-        {/* 2. Teacher's Explanation Audio Media Player (Separate Card Below TTS) */}
-        <View style={[styles.teacherPlayerCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 20 }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-            <Ionicons name="mic-outline" size={18} color="#D97706" />
-            <Text style={[styles.teacherPlayerTitle, { color: colors.text, marginBottom: 0 }]}>
-              Teacher's Explanation
-            </Text>
-          </View>
-
-          {/* Teacher Player Main Controls Row */}
-          <View style={styles.teacherControlsRow}>
-            {/* Speed Toggle */}
-            <TouchableOpacity
-              style={styles.teacherSideIconBtn}
-              onPress={toggleTeacherSpeed}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="speedometer-outline" size={22} color="#D97706" />
-              <Text style={{ fontSize: 9, fontWeight: '700', color: '#D97706', marginTop: 1 }}>
-                {teacherSpeed}x
+        {/* 2. Teacher's Explanation Audio Media Player (Only display if teacher explanation audio is uploaded) */}
+        {Boolean(teacherAudioUrl && teacherAudioUrl.trim().length > 0) && (
+          <View style={[styles.teacherPlayerCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 20 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+              <Ionicons name="mic-outline" size={18} color="#D97706" />
+              <Text style={[styles.teacherPlayerTitle, { color: colors.text, marginBottom: 0 }]}>
+                Teacher's Explanation
               </Text>
-            </TouchableOpacity>
-
-            {/* Teacher Main Play / Pause Circle */}
-            <TouchableOpacity
-              style={[styles.teacherPlayBtn, { backgroundColor: '#D97706', shadowColor: '#D97706' }]}
-              onPress={handleTeacherPlayPause}
-              disabled={isTeacherBuffering}
-              activeOpacity={0.85}
-            >
-              {isTeacherBuffering ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Ionicons
-                  name={isTeacherPlaying ? 'pause' : 'play'}
-                  size={26}
-                  color="#FFFFFF"
-                  style={{ marginLeft: isTeacherPlaying ? 0 : 2 }}
-                />
-              )}
-            </TouchableOpacity>
-
-            {/* Skip 15s forward */}
-            <TouchableOpacity
-              style={styles.teacherSideIconBtn}
-              onPress={() => handleTeacherSkip(15)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="play-forward" size={22} color="#D97706" />
-              <Text style={{ fontSize: 9, fontWeight: '700', color: '#D97706', marginTop: 1 }}>
-                +15s
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Teacher Interactive Audio Scrubber Bar */}
-          <TouchableOpacity
-            style={styles.teacherScrubberTrack}
-            activeOpacity={0.8}
-            onPress={(e) => {
-              const { locationX } = e.nativeEvent;
-              if (teacherDurationSec > 0 && teacherPlayer) {
-                const ratio = Math.max(0, Math.min(1, locationX / 280));
-                handleTeacherSkip((ratio * teacherDurationSec) - teacherCurrentSec);
-              }
-            }}
-          >
-            <View style={[styles.teacherScrubberBg, { backgroundColor: colors.surfaceAlt }]}>
-              <View
-                style={[
-                  styles.teacherScrubberFill,
-                  { width: `${Math.min(100, Math.max(0, teacherProgressPercent))}%`, backgroundColor: '#D97706' },
-                ]}
-              />
             </View>
-          </TouchableOpacity>
 
-          {/* Audio Timers Row */}
-          <View style={styles.teacherTimeRow}>
-            <Text style={[styles.teacherTimeText, { color: colors.textSecondary }]}>
-              {formatTime(teacherCurrentSec)}
-            </Text>
-            <Text style={[styles.teacherTimeText, { color: colors.textSecondary }]}>
-              {teacherDurationSec > 0 ? formatTime(teacherDurationSec) : (lesson?.duration || '8:15')}
-            </Text>
+            {/* Teacher Player Main Controls Row */}
+            <View style={styles.teacherControlsRow}>
+              {/* Speed Toggle */}
+              <TouchableOpacity
+                style={styles.teacherSideIconBtn}
+                onPress={toggleTeacherSpeed}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="speedometer-outline" size={22} color="#D97706" />
+                <Text style={{ fontSize: 9, fontWeight: '700', color: '#D97706', marginTop: 1 }}>
+                  {teacherSpeed}x
+                </Text>
+              </TouchableOpacity>
+
+              {/* Teacher Main Play / Pause Circle */}
+              <TouchableOpacity
+                style={[styles.teacherPlayBtn, { backgroundColor: '#D97706', shadowColor: '#D97706' }]}
+                onPress={handleTeacherPlayPause}
+                disabled={isTeacherBuffering}
+                activeOpacity={0.85}
+              >
+                {isTeacherBuffering ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons
+                    name={isTeacherPlaying ? 'pause' : 'play'}
+                    size={26}
+                    color="#FFFFFF"
+                    style={{ marginLeft: isTeacherPlaying ? 0 : 2 }}
+                  />
+                )}
+              </TouchableOpacity>
+
+              {/* Skip 15s forward */}
+              <TouchableOpacity
+                style={styles.teacherSideIconBtn}
+                onPress={() => handleTeacherSkip(15)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="play-forward" size={22} color="#D97706" />
+                <Text style={{ fontSize: 9, fontWeight: '700', color: '#D97706', marginTop: 1 }}>
+                  +15s
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Teacher Interactive Audio Scrubber Bar */}
+            <TouchableOpacity
+              style={styles.teacherScrubberTrack}
+              activeOpacity={0.8}
+              onPress={(e) => {
+                const { locationX } = e.nativeEvent;
+                if (teacherDurationSec > 0 && teacherPlayer) {
+                  const ratio = Math.max(0, Math.min(1, locationX / 280));
+                  handleTeacherSkip((ratio * teacherDurationSec) - teacherCurrentSec);
+                }
+              }}
+            >
+              <View style={[styles.teacherScrubberBg, { backgroundColor: colors.surfaceAlt }]}>
+                <View
+                  style={[
+                    styles.teacherScrubberFill,
+                    { width: `${Math.min(100, Math.max(0, teacherProgressPercent))}%`, backgroundColor: '#D97706' },
+                  ]}
+                />
+              </View>
+            </TouchableOpacity>
+
+            {/* Audio Timers Row */}
+            <View style={styles.teacherTimeRow}>
+              <Text style={[styles.teacherTimeText, { color: colors.textSecondary }]}>
+                {formatTime(teacherCurrentSec)}
+              </Text>
+              <Text style={[styles.teacherTimeText, { color: colors.textSecondary }]}>
+                {teacherDurationSec > 0 ? formatTime(teacherDurationSec) : (lesson?.duration || '8:15')}
+              </Text>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Lesson Illustrations / Images uploaded by Admin */}
         {Array.isArray(lesson?.images) && lesson.images.filter((img) => typeof img === 'string' && img.trim().length > 0).length > 0 && (

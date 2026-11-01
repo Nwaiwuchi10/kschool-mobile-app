@@ -132,14 +132,18 @@ export default function TopicDetailsScreen() {
           (subStatus.value.status === 'active' || subStatus.value.status === 'grace');
         setHasSubscription(isSubscribed);
 
-        // Passed topic quizzes set
+        // Passed topic and lesson quizzes set
         const completedTopicIds = new Set<string>();
+        const passedLessonIds = new Set<string>();
         if (userQuizResults.status === 'fulfilled' && Array.isArray(userQuizResults.value)) {
           setQuizResults(userQuizResults.value);
           userQuizResults.value.forEach((r: any) => {
             if (r.passed) {
               const qTopicId = r.quiz?.topic?._id || r.quiz?.topic;
               if (qTopicId) completedTopicIds.add(qTopicId.toString());
+
+              const qLessonId = r.quiz?.lesson?._id || r.quiz?.lesson;
+              if (qLessonId) passedLessonIds.add(qLessonId.toString());
             }
           });
         }
@@ -265,22 +269,49 @@ export default function TopicDetailsScreen() {
 
             if (fetchedLessons.status === 'fulfilled') {
               const rawLessons = fetchedLessons.value || [];
-              const firstLessonId = rawLessons[0]?._id?.toString();
-              const hasCompletedFirstLessonAndQuiz =
-                (firstLessonId && completedSet.has(firstLessonId)) ||
-                isPassedThisTopic ||
-                completedSet.size > 0;
+              let previousLessonsUnlockedAndPassed = true;
 
               const mappedLessons = rawLessons.map((l: any, idx: number) => {
-                const isCompleted = completedSet.has(l._id?.toString());
-                const prevLessonCompleted =
-                  idx === 0 ||
-                  completedSet.has(rawLessons[idx - 1]?._id?.toString()) ||
-                  hasCompletedFirstLessonAndQuiz;
+                const lessonIdStr = (l._id || '').toString();
+                const isCompleted = completedSet.has(lessonIdStr);
 
-                const requiresSubscription = !isSubscribed && idx > 0;
-                const requiresPriorQuiz = isSubscribed && idx > 0 && !prevLessonCompleted;
-                const isLocked = requiresSubscription || requiresPriorQuiz;
+                // A lesson's quiz is passed if its specific quiz was passed (>=70% cutoff),
+                // or if it was marked completed in user profile / topic passed
+                const hasPassedLessonQuiz =
+                  passedLessonIds.has(lessonIdStr) ||
+                  (completedSet.has(lessonIdStr) && (passedLessonIds.size === 0 || passedLessonIds.has(lessonIdStr)));
+
+                let requiresSubscription = false;
+                let requiresPriorQuiz = false;
+                let isLocked = false;
+
+                if (idx === 0) {
+                  // Lesson 1 is the free preview trial lesson
+                  isLocked = false;
+                  requiresSubscription = false;
+                  requiresPriorQuiz = false;
+                } else if (!isSubscribed) {
+                  // If user has not subscribed to this class, all subsequent lessons require subscription
+                  requiresSubscription = true;
+                  isLocked = true;
+                } else {
+                  // If user has subscribed, lock this lesson if the immediate previous lesson's quiz was not passed
+                  const prevLessonId = rawLessons[idx - 1]?._id?.toString();
+                  const prevPassed =
+                    prevLessonId &&
+                    (passedLessonIds.has(prevLessonId) || (completedSet.has(prevLessonId) && !passedLessonIds.has(prevLessonId) && previousLessonsUnlockedAndPassed));
+
+                  if (!previousLessonsUnlockedAndPassed || !prevPassed) {
+                    requiresPriorQuiz = true;
+                    isLocked = true;
+                  }
+                }
+
+                if (!hasPassedLessonQuiz && idx === 0 && !isSubscribed) {
+                  previousLessonsUnlockedAndPassed = false;
+                } else if (isLocked || !hasPassedLessonQuiz) {
+                  previousLessonsUnlockedAndPassed = false;
+                }
 
                 return {
                   id: (idx + 1).toString().padStart(2, '0'),
@@ -364,8 +395,8 @@ export default function TopicDetailsScreen() {
   const handleLessonPress = async (lesson: any, index: number) => {
     if (lesson.requiresPriorQuiz) {
       Alert.alert(
-        'Complete Lesson Quiz First',
-        'Please attend the previous lesson and complete its quiz exercise before advancing to this lesson.'
+        'Pass Previous Lesson Quiz First',
+        'You must score at least 70% cutoff mark on the previous lesson\'s quiz to unlock this lesson.'
       );
       return;
     }
