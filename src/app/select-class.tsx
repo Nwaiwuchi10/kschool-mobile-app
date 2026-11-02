@@ -38,27 +38,18 @@ export default function SelectClassScreen() {
       return;
     }
 
-    // If user has subscribed for this selected class, allow changing class directly
-    if (isCurrentPaid) {
-      try {
-        setIsLoading(true);
-        await selectClass(currentSelected);
+    try {
+      setIsLoading(true);
+      await selectClass(currentSelected);
 
-        router.push({
-          pathname: '/select-subjects',
-          params: { class: currentSelected },
-        });
-      } catch (err: any) {
-        showError('Selection Error', err.message || 'Failed to select class. Please try again.');
-      } finally {
-        setIsLoading(false);
-      }
-    } else {
-      // If user has not subscribed for this class, they must proceed to payment
       router.push({
-        pathname: '/choose-plan',
+        pathname: '/select-subjects',
         params: { class: currentSelected },
       });
+    } catch (err: any) {
+      showError('Selection Error', err.message || 'Failed to select class. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -143,23 +134,10 @@ export default function SelectClassScreen() {
         {/* Actions */}
         <View style={styles.actionsContainer}>
           <PrimaryButton 
-            title={isCurrentPaid ? `Switch to ${currentSelected}` : `Subscribe & Unlock ${currentSelected}`} 
+            title={`Continue with ${currentSelected}`} 
             loading={isLoading}
             onPress={handleContinue} 
           />
-          {!isCurrentPaid && (
-            <Text
-              style={{
-                fontSize: 12,
-                color: colors.textSecondary,
-                textAlign: 'center',
-                marginTop: 10,
-                lineHeight: 16,
-              }}
-            >
-              You can browse and view all classes. To switch your active learning curriculum to {currentSelected}, a verified subscription is required.
-            </Text>
-          )}
         </View>
       </View>
 
