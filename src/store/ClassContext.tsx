@@ -72,9 +72,6 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     try {
       const status = await classService.getMyClassStatus();
-      if (status.selectedClass) {
-        setSelectedClassState(status.selectedClass);
-      }
       setPaidClass(status.paidClass || null);
       const classesList = Array.isArray(status.paidClasses)
         ? status.paidClasses
@@ -83,11 +80,16 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         : [];
       setPaidClasses(classesList);
       setIsClassLocked(false);
-      const current = status.selectedClass || selectedClass;
+
+      // Check saved class in local storage first to respect user's active session switch
+      const saved = await storageService.getSelectedClass();
+      const effectiveSelected = saved || status.selectedClass || selectedClass;
+      if (effectiveSelected) {
+        setSelectedClassState(effectiveSelected);
+      }
+
       const isSub =
-        status.isCurrentClassSubscribed !== undefined
-          ? status.isCurrentClassSubscribed
-          : classesList.some((pc) => normalizeClass(pc) === normalizeClass(current));
+        classesList.some((pc) => normalizeClass(pc) === normalizeClass(effectiveSelected));
       setIsCurrentClassSubscribed(isSub);
     } catch (err) {
       console.warn('Failed to fetch class lock status:', err);
@@ -101,15 +103,12 @@ export const ClassProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Restore selected class & check subscription status when auth state changes
   useEffect(() => {
     const syncClassState = async () => {
-      // 1. If user has class on profile, use it
-      if (user?.class) {
+      // 1. Check local storage first (user's explicit selection)
+      const saved = await storageService.getSelectedClass();
+      if (saved) {
+        setSelectedClassState(saved);
+      } else if (user?.class) {
         setSelectedClassState(user.class);
-      } else {
-        // Otherwise check local storage
-        const saved = await storageService.getSelectedClass();
-        if (saved) {
-          setSelectedClassState(saved);
-        }
       }
 
       // 2. If authenticated, fetch subscription class status

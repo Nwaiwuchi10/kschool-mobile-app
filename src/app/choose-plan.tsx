@@ -16,9 +16,10 @@ export default function ChoosePlanScreen() {
     topicTitle?: string;
     subjectId?: string;
     subjectName?: string;
+    class?: string;
   }>();
   const { classes, selectedClass, paidClasses, selectClass } = useClass();
-  const [targetClass, setTargetClass] = useState<string>(selectedClass || 'JSS 1');
+  const [targetClass, setTargetClass] = useState<string>(params.class || selectedClass || 'JSS 1');
   const currentClass = targetClass || selectedClass || 'JSS 1';
 
   const [packages, setPackages] = useState<SubscriptionPackage[]>([]);

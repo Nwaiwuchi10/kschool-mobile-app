@@ -12,11 +12,22 @@ import { storageService } from '@/services/storage.service';
 
 export default function HomeScreen() {
   const { user } = useAuth();
-  const { selectedClass } = useClass();
+  const { selectedClass, paidClasses, paidClass, selectClass } = useClass();
   const { colors, isDark } = useAppTheme();
   const pathname = usePathname();
   const isHomeScreen = pathname === '/' || pathname === '/(tabs)' || pathname === '/(tabs)/index';
   const currentClass = selectedClass || user?.class || 'JSS 1';
+
+  // Subscribed classes dropdown state
+  const [showClassDropdown, setShowClassDropdown] = useState(false);
+  const subscribedClasses = Array.from(
+    new Set([
+      ...(paidClasses || []),
+      ...(paidClass ? [paidClass] : []),
+      ...(user?.class ? [user.class] : []),
+      currentClass,
+    ].filter(Boolean))
+  );
 
   const [dashboardData, setDashboardData] = useState<StudentDashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -160,7 +171,7 @@ export default function HomeScreen() {
             <View>
               <Text style={[styles.greeting, { color: colors.text }]}>Good day, {displayName}</Text>
               <TouchableOpacity
-                onPress={() => router.push('/select-class')}
+                onPress={() => setShowClassDropdown(true)}
                 activeOpacity={0.7}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}
               >
@@ -399,6 +410,119 @@ export default function HomeScreen() {
         )}
 
       </ScrollView>
+
+      {/* Subscribed Classes Dropdown Modal */}
+      <Modal
+        visible={showClassDropdown}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowClassDropdown(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowClassDropdown(false)}
+        >
+          <View
+            style={[
+              styles.dropdownCard,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <View style={styles.dropdownHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="school" size={20} color={colors.primary} />
+                <Text style={[styles.dropdownTitle, { color: colors.text }]}>
+                  Your Enrolled Classes
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowClassDropdown(false)}
+                style={styles.dropdownCloseBtn}
+              >
+                <Ionicons name="close" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.dropdownSubtitle, { color: colors.textSecondary }]}>
+              Switch between the classes you have subscribed for. All curriculum subjects, lessons, quizzes, and progress will switch instantly.
+            </Text>
+
+            <ScrollView style={{ maxHeight: 260 }} showsVerticalScrollIndicator={false}>
+              {subscribedClasses.map((clsName) => {
+                const isSelected = clsName.toLowerCase() === currentClass.toLowerCase();
+                const isPaid = (paidClasses || []).some(
+                  (pc) => pc.toLowerCase() === clsName.toLowerCase()
+                );
+
+                return (
+                  <TouchableOpacity
+                    key={clsName}
+                    style={[
+                      styles.dropdownItem,
+                      {
+                        backgroundColor: isSelected ? colors.cardHighlightBg : colors.surfaceAlt,
+                        borderColor: isSelected ? colors.primary : colors.border,
+                      },
+                    ]}
+                    onPress={async () => {
+                      setShowClassDropdown(false);
+                      if (!isSelected) {
+                        await selectClass(clsName);
+                      }
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <Ionicons
+                        name={isSelected ? 'radio-button-on' : 'radio-button-off'}
+                        size={18}
+                        color={isSelected ? colors.primary : colors.textMuted}
+                      />
+                      <Text
+                        style={[
+                          styles.dropdownItemText,
+                          {
+                            color: isSelected ? colors.primary : colors.text,
+                            fontWeight: isSelected ? '800' : '600',
+                          },
+                        ]}
+                      >
+                        {clsName}
+                      </Text>
+                    </View>
+                    {isPaid ? (
+                      <View style={[styles.subscribedBadge, { backgroundColor: '#D1FAE5' }]}>
+                        <Ionicons name="shield-checkmark" size={12} color="#059669" />
+                        <Text style={styles.subscribedBadgeText}>Subscribed</Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.subscribedBadge, { backgroundColor: colors.surface }]}>
+                        <Text style={[styles.subscribedBadgeText, { color: colors.textSecondary }]}>Active</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[
+                styles.addNewClassBtn,
+                { borderColor: colors.primary, backgroundColor: colors.cardHighlightBg },
+              ]}
+              onPress={() => {
+                setShowClassDropdown(false);
+                router.push('/select-class');
+              }}
+            >
+              <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
+              <Text style={[styles.addNewClassText, { color: colors.primary }]}>
+                Subscribe for Another Class
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Admin Announcement Popup Modal for Students */}
       <Modal
@@ -992,5 +1116,76 @@ const styles = StyleSheet.create({
   announcementDismissText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  dropdownCard: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  dropdownHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  dropdownTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  dropdownCloseBtn: {
+    padding: 4,
+  },
+  dropdownSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    marginBottom: 10,
+  },
+  dropdownItemText: {
+    fontSize: 15,
+  },
+  subscribedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  subscribedBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  addNewClassBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    marginTop: 12,
+  },
+  addNewClassText: {
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

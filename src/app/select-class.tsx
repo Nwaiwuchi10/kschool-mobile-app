@@ -28,24 +28,37 @@ export default function SelectClassScreen() {
     setCurrentSelected(className);
   };
 
+  const isCurrentPaid =
+    (paidClasses && paidClasses.some((pc) => pc.toLowerCase() === currentSelected.toLowerCase())) ||
+    (paidClass && paidClass.toLowerCase() === currentSelected.toLowerCase());
+
   const handleContinue = async () => {
     if (!currentSelected) {
       showError('Class Required', 'Please select a class to continue.');
       return;
     }
 
-    try {
-      setIsLoading(true);
-      await selectClass(currentSelected);
+    // If user has subscribed for this selected class, allow changing class directly
+    if (isCurrentPaid) {
+      try {
+        setIsLoading(true);
+        await selectClass(currentSelected);
 
+        router.push({
+          pathname: '/select-subjects',
+          params: { class: currentSelected },
+        });
+      } catch (err: any) {
+        showError('Selection Error', err.message || 'Failed to select class. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      // If user has not subscribed for this class, they must proceed to payment
       router.push({
-        pathname: '/select-subjects',
+        pathname: '/choose-plan',
         params: { class: currentSelected },
       });
-    } catch (err: any) {
-      showError('Selection Error', err.message || 'Failed to select class. Please try again.');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -130,38 +143,22 @@ export default function SelectClassScreen() {
         {/* Actions */}
         <View style={styles.actionsContainer}>
           <PrimaryButton 
-            title={`Continue with ${currentSelected}`} 
+            title={isCurrentPaid ? `Switch to ${currentSelected}` : `Subscribe & Unlock ${currentSelected}`} 
             loading={isLoading}
             onPress={handleContinue} 
           />
-          {!((paidClasses && paidClasses.some((pc) => pc.toLowerCase() === currentSelected.toLowerCase())) ||
-            (paidClass && paidClass.toLowerCase() === currentSelected.toLowerCase())) && (
-            <TouchableOpacity
+          {!isCurrentPaid && (
+            <Text
               style={{
-                marginTop: 12,
-                height: 48,
-                borderRadius: 24,
-                borderWidth: 1.5,
-                borderColor: colors.primary,
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}
-              onPress={async () => {
-                try {
-                  setIsLoading(true);
-                  await selectClass(currentSelected);
-                  router.push('/choose-plan');
-                } catch (err: any) {
-                  showError('Selection Error', err.message || 'Failed to select class.');
-                } finally {
-                  setIsLoading(false);
-                }
+                fontSize: 12,
+                color: colors.textSecondary,
+                textAlign: 'center',
+                marginTop: 10,
+                lineHeight: 16,
               }}
             >
-              <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '700' }}>
-                Subscribe for {currentSelected} (1 Year)
-              </Text>
-            </TouchableOpacity>
+              You can browse and view all classes. To switch your active learning curriculum to {currentSelected}, a verified subscription is required.
+            </Text>
           )}
         </View>
       </View>
