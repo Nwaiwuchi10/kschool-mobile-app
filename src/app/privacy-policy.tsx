@@ -224,7 +224,7 @@ export default function PrivacyPolicyScreen() {
           </Text>
         </View>
 
-        {/* Meta Info Box */}
+        {/* Meta Info Box - Commented out for now
         <View style={styles.metaContainer}>
           <Text style={[styles.metaRow, { color: colors.textSecondary }]}>
             <Text style={[styles.metaLabel, { color: colors.text }]}>
@@ -266,6 +266,7 @@ export default function PrivacyPolicyScreen() {
             { backgroundColor: isDark ? colors.border : '#E5E7EB' },
           ]}
         />
+        */}
 
         {/* Numbered Sections 1 - 15 */}
         {SECTIONS.map((section) => (
