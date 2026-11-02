@@ -42,7 +42,7 @@ export default function SupportScreen() {
       id: '3',
       title: 'Learning & Lessons',
       icon: 'phone-portrait-outline',
-      route: '/faq', // jumps to FAQ (or specific category)
+      route: '/learning-help',
     },
     {
       id: '4',
