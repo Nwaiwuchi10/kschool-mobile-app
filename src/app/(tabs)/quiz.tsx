@@ -563,8 +563,10 @@ export default function QuizScreen() {
                             backgroundColor: isSelected
                               ? colors.primary
                               : isDark
-                              ? '#32363C'
+                              ? '#3A3F47'
                               : colors.surfaceAlt,
+                            borderColor: isDark && !isSelected ? '#4B5563' : undefined,
+                            borderWidth: isDark && !isSelected ? 1 : 0,
                           },
                         ]}
                       >
@@ -575,8 +577,9 @@ export default function QuizScreen() {
                               color: isSelected
                                 ? '#FFFFFF'
                                 : isDark
-                                ? '#E5E7EB'
+                                ? '#FFFFFF' // Brightest pure white for A, B, C etc. in dark mode
                                 : colors.textSecondary,
+                              fontWeight: '800',
                             },
                           ]}
                         >
