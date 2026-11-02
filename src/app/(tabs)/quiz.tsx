@@ -15,6 +15,7 @@ import { router, useLocalSearchParams, usePathname } from 'expo-router';
 import { quizService, MobileQuiz, QuestionItem } from '@/services/quiz.service';
 import { lessonService } from '@/services/lesson.service';
 import { subscriptionService } from '@/services/subscription.service';
+import { storageService } from '@/services/storage.service';
 import { MathView } from '@/components/MathView';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useClass } from '@/store/ClassContext';
@@ -320,6 +321,11 @@ export default function QuizScreen() {
         }
       });
       const passed = (score / Math.max(totalCount, 1)) >= 0.7;
+
+      // Mark lesson quiz as passed in local storage immediately
+      if (passed && params.lessonId) {
+        await storageService.markLessonQuizAsPassed(params.lessonId).catch(() => {});
+      }
 
       // Only record completion in backend if student passed (score >= 70%)
       if (passed && (params.topicId || params.lessonId)) {

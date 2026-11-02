@@ -394,17 +394,23 @@ export default function LessonScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => {
-            if (router.canGoBack()) {
-              router.back();
-            } else if (params.topicId) {
+          onPress={async () => {
+            const lastCtx = await storageService.getLastLearningContext();
+            const targetTopicId = params.topicId || lastCtx?.topicId;
+            const targetSubjectName = subjectName.split(' > ')[0] || lastCtx?.subjectName || 'Subject';
+            const targetTopicTitle = subjectName.split(' > ')[1] || lastCtx?.topicTitle || params.title || 'Topic Details';
+
+            if (targetTopicId) {
               router.replace({
                 pathname: '/topic-details',
                 params: {
-                  topicId: params.topicId,
-                  subjectName: subjectName.split(' > ')[0] || 'Subject',
+                  topicId: targetTopicId,
+                  subjectName: targetSubjectName,
+                  topicTitle: targetTopicTitle,
                 },
               });
+            } else if (router.canGoBack()) {
+              router.back();
             } else {
               router.replace('/(tabs)/subjects');
             }
@@ -891,19 +897,27 @@ export default function LessonScreen() {
                     topicId: params.topicId,
                   },
                 });
-              } else if (params.topicId) {
-                router.replace({
-                  pathname: '/topic-details',
-                  params: {
-                    topicId: params.topicId,
-                    topicTitle: subjectName.split(' > ')[1] || params.title || 'Topic Details',
-                    subjectName: subjectName.split(' > ')[0] || 'Subject',
-                  },
-                });
-              } else if (router.canGoBack()) {
-                router.back();
               } else {
-                router.replace('/(tabs)/subjects');
+                storageService.getLastLearningContext().then((lastCtx) => {
+                  const targetTopicId = params.topicId || lastCtx?.topicId;
+                  const targetSubjectName = subjectName.split(' > ')[0] || lastCtx?.subjectName || 'Subject';
+                  const targetTopicTitle = subjectName.split(' > ')[1] || lastCtx?.topicTitle || params.title || 'Topic Details';
+
+                  if (targetTopicId) {
+                    router.replace({
+                      pathname: '/topic-details',
+                      params: {
+                        topicId: targetTopicId,
+                        topicTitle: targetTopicTitle,
+                        subjectName: targetSubjectName,
+                      },
+                    });
+                  } else if (router.canGoBack()) {
+                    router.back();
+                  } else {
+                    router.replace('/(tabs)/subjects');
+                  }
+                });
               }
             }}
           >

@@ -7,6 +7,7 @@ const LEARNING_CTX_KEY = 'kschoolmate_last_learning_ctx';
 const PREFERRED_VOICE_KEY = 'kschoolmate_preferred_tts_voice';
 const READ_ANNOUNCEMENTS_KEY = 'kschoolmate_read_announcements';
 const DISMISSED_ANNOUNCEMENTS_KEY = 'kschoolmate_dismissed_announcements';
+const PASSED_LESSON_QUIZZES_KEY = 'kschoolmate_passed_lesson_quizzes';
 
 export interface LearningContextData {
   subjectId?: string;
@@ -251,6 +252,39 @@ export const storageService = {
       }
     } catch (err) {
       console.warn('Failed to dismiss modal announcement', err);
+    }
+  },
+
+  async getPassedLessonIds(): Promise<string[]> {
+    try {
+      let raw: string | null = null;
+      if (Platform.OS === 'web') {
+        raw = localStorage.getItem(PASSED_LESSON_QUIZZES_KEY);
+      } else {
+        raw = await SecureStore.getItemAsync(PASSED_LESSON_QUIZZES_KEY);
+      }
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  async markLessonQuizAsPassed(lessonId: string): Promise<void> {
+    try {
+      if (!lessonId || !lessonId.trim()) return;
+      const cleanId = lessonId.trim();
+      const list = await this.getPassedLessonIds();
+      if (!list.includes(cleanId)) {
+        list.push(cleanId);
+        const serialized = JSON.stringify(list);
+        if (Platform.OS === 'web') {
+          localStorage.setItem(PASSED_LESSON_QUIZZES_KEY, serialized);
+        } else {
+          await SecureStore.setItemAsync(PASSED_LESSON_QUIZZES_KEY, serialized);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to mark lesson quiz as passed in local storage', err);
     }
   },
 };

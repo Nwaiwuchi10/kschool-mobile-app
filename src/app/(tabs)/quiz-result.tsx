@@ -8,6 +8,7 @@ import PrimaryButton from '@/components/ui/PrimaryButton';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useClass } from '@/store/ClassContext';
 import { subscriptionService } from '@/services/subscription.service';
+import { storageService } from '@/services/storage.service';
 
 export default function QuizResultScreen() {
   const { colors, isDark } = useAppTheme();
@@ -46,6 +47,13 @@ export default function QuizResultScreen() {
   const totalNum = params.total ? parseInt(params.total, 10) : 0;
   const percent = totalNum > 0 ? Math.min(100, Math.max(0, Math.round((scoreNum / totalNum) * 100))) : 0;
   const isPassed = params.passed ? params.passed === 'true' : percent >= 70;
+
+  // Ensure passed lesson is persisted in local storage
+  useEffect(() => {
+    if (isPassed && params.lessonId) {
+      storageService.markLessonQuizAsPassed(params.lessonId).catch(() => {});
+    }
+  }, [isPassed, params.lessonId]);
   const incorrectNum = Math.max(0, totalNum - scoreNum);
   const quizTitle = params.title || 'Curriculum Quiz';
 

@@ -1,5 +1,5 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams, usePathname } from 'expo-router';
+import { router, useLocalSearchParams, usePathname, useFocusEffect } from 'expo-router';
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import ResponseMessageModal from '@/components/ui/ResponseMessageModal';
 import { subjectService } from '@/services/subject.service';
@@ -107,6 +107,15 @@ export default function TopicDetailsScreen() {
     }
   }, [selectedTopicId, selectedTopicTitle, subjectTitle, effectiveSubjectId]);
 
+  // Focus refresh trigger
+  const [focusCounter, setFocusCounter] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      setFocusCounter((prev) => prev + 1);
+    }, [])
+  );
+
   // Main unified fetcher: loads subject syllabus, topics, and active topic lessons/quizzes
   useEffect(() => {
     if (!isFocused) return;
@@ -116,12 +125,13 @@ export default function TopicDetailsScreen() {
       try {
         setIsLoading(true);
 
-        const [subStatus, subjectData, userQuizResults, userProfile] =
+        const [subStatus, subjectData, userQuizResults, userProfile, localPassedIds] =
           await Promise.allSettled([
             subscriptionService.getMyActiveSubscription(selectedClass).catch(() => null),
             effectiveSubjectId ? subjectService.getSubjectById(effectiveSubjectId).catch(() => null) : Promise.resolve(null),
             quizService.getUserResults().catch(() => []),
             authService.getProfile().catch(() => null),
+            storageService.getPassedLessonIds().catch(() => []),
           ]);
 
         if (!isMounted) return;
@@ -135,6 +145,14 @@ export default function TopicDetailsScreen() {
         // Passed topic and lesson quizzes set
         const completedTopicIds = new Set<string>();
         const passedLessonIds = new Set<string>();
+
+        // Add local passed quizzes immediately
+        if (localPassedIds.status === 'fulfilled' && Array.isArray(localPassedIds.value)) {
+          localPassedIds.value.forEach((id: string) => {
+            if (id) passedLessonIds.add(id.toString());
+          });
+        }
+
         if (userQuizResults.status === 'fulfilled' && Array.isArray(userQuizResults.value)) {
           setQuizResults(userQuizResults.value);
           userQuizResults.value.forEach((r: any) => {
@@ -348,7 +366,7 @@ export default function TopicDetailsScreen() {
     return () => {
       isMounted = false;
     };
-  }, [effectiveSubjectId, selectedTopicId, selectedClass, isFocused]);
+  }, [effectiveSubjectId, selectedTopicId, selectedClass, isFocused, focusCounter]);
 
   const maxLessons = 4;
 
@@ -709,19 +727,19 @@ export default function TopicDetailsScreen() {
                     )}
                   </View>
                   <View style={styles.lessonContent}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View style={styles.lessonHeaderRow}>
                       <Text
                         style={[
                           styles.lessonTitle,
                           { color: isLocked ? colors.textSecondary : colors.text },
                         ]}
-                        numberOfLines={1}
+                        numberOfLines={2}
                       >
                         {lesson.title}
                       </Text>
                       {isLocked && (
-                        <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6 }}>
-                          <Text style={{ fontSize: 9, fontWeight: '800', color: '#DC2626' }}>LOCKED</Text>
+                        <View style={styles.lockedBadge}>
+                          <Text style={styles.lockedBadgeText}>LOCKED</Text>
                         </View>
                       )}
                     </View>
@@ -731,6 +749,7 @@ export default function TopicDetailsScreen() {
                           styles.lessonFormat,
                           { color: isLocked ? colors.textMuted : colors.primary },
                         ]}
+                        numberOfLines={1}
                       >
                         {lesson.requiresPriorQuiz
                           ? 'Complete Previous Lesson Quiz to Unlock'
@@ -738,8 +757,10 @@ export default function TopicDetailsScreen() {
                           ? 'Subscribe to Unlock'
                           : lesson.format}
                       </Text>
-                      <Text style={[styles.lessonDot, { color: colors.textMuted }]}> • </Text>
-                      <Text style={[styles.lessonDuration, { color: colors.textSecondary }]}>{lesson.duration}</Text>
+                      <Text style={[styles.lessonDot, { color: colors.textMuted }]}>•</Text>
+                      <Text style={[styles.lessonDuration, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {lesson.duration}
+                      </Text>
                     </View>
                   </View>
                   {isLocked ? (
@@ -1129,39 +1150,63 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
     borderRadius: 16,
-    padding: 16,
+    padding: 14,
+    gap: 12,
   },
   lessonNumberBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 10,
     backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
   },
   lessonNumberText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#6B7280',
   },
   lessonContent: {
     flex: 1,
+    justifyContent: 'center',
+  },
+  lessonHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 4,
+  },
+  lockedBadge: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+    alignSelf: 'center',
+  },
+  lockedBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#DC2626',
+    letterSpacing: 0.5,
   },
   lessonTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: '#1A1A1A',
-    marginBottom: 4,
+    flexShrink: 1,
   },
   lessonMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 4,
   },
   lessonFormat: {
     fontSize: 12,
     color: '#127A71',
     fontWeight: '600',
+    flexShrink: 1,
   },
   lessonDot: {
     fontSize: 12,
