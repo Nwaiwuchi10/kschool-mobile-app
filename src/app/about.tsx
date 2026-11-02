@@ -4,61 +4,73 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useAppTheme } from '@/hooks/useAppTheme';
 
 export default function AboutScreen() {
+  const { colors, isDark } = useAppTheme();
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
-          <Text style={styles.backText}>Back</Text>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+          <Text style={[styles.backText, { color: colors.text }]}>Back</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         
-        <Text style={styles.title}>About KSCHOOLMATE</Text>
+        <Text style={[styles.title, { color: colors.text }]}>About KSCHOOLMATE</Text>
 
         <View style={styles.logoSection}>
-          <View style={styles.logoBox}>
+          <View style={[styles.logoBox, { backgroundColor: colors.primary }]}>
             <Ionicons name="school-outline" size={48} color="#FFFFFF" />
           </View>
-          <Text style={styles.brandTitle}>KSCHOOLMATE</Text>
-          <Text style={styles.brandSubtitle}>Your School in Your Pocket</Text>
+          <Text style={[styles.brandTitle, { color: colors.text }]}>KSCHOOLMATE</Text>
+          <Text style={[styles.brandSubtitle, { color: colors.primary }]}>Your School in Your Pocket</Text>
           
-          <Text style={styles.description}>
+          <Text style={[styles.description, { color: colors.textSecondary }]}>
             KSCHOOLMATE is a smart learning platform designed to help students access lessons, track progress, and stay connected with their school community.
           </Text>
 
-          <View style={styles.versionPill}>
-            <Text style={styles.versionText}>Version 1.0.0</Text>
+          <View style={[styles.versionPill, { backgroundColor: isDark ? colors.surfaceAlt : '#E5E7EB' }]}>
+            <Text style={[styles.versionText, { color: isDark ? colors.textSecondary : '#4B5563' }]}>Version 1.0.0</Text>
           </View>
         </View>
 
         <View style={styles.linksContainer}>
-          <TouchableOpacity style={styles.linkRow}>
-            <View style={styles.iconBox}>
-              <Ionicons name="document-text-outline" size={20} color="#1A1A1A" />
+          <TouchableOpacity
+            style={styles.linkRow}
+            activeOpacity={0.7}
+            onPress={() => router.push('/privacy-policy')}
+          >
+            <View style={[styles.iconBox, { backgroundColor: isDark ? colors.surfaceAlt : '#E5E7EB' }]}>
+              <Ionicons name="document-text-outline" size={20} color={colors.text} />
             </View>
-            <Text style={styles.linkTitle}>Terms & Conditions</Text>
-            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            <Text style={[styles.linkTitle, { color: colors.text }]}>Terms & Conditions</Text>
+            <Ionicons name="chevron-forward" size={20} color={isDark ? '#6B7280' : '#9CA3AF'} />
           </TouchableOpacity>
 
-          <View style={styles.separator} />
+          <View style={[styles.separator, { backgroundColor: isDark ? colors.border : '#F3F4F6' }]} />
 
           <TouchableOpacity
             style={styles.linkRow}
             activeOpacity={0.7}
             onPress={() => router.push('/privacy-policy')}
           >
-            <View style={styles.iconBox}>
-              <Ionicons name="shield-checkmark-outline" size={20} color="#1A1A1A" />
+            <View style={[styles.iconBox, { backgroundColor: isDark ? colors.surfaceAlt : '#E5E7EB' }]}>
+              <Ionicons name="shield-checkmark-outline" size={20} color={colors.text} />
             </View>
-            <Text style={styles.linkTitle}>Privacy Policy</Text>
-            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            <Text style={[styles.linkTitle, { color: colors.text }]}>Privacy Policy</Text>
+            <Ionicons name="chevron-forward" size={20} color={isDark ? '#6B7280' : '#9CA3AF'} />
           </TouchableOpacity>
         </View>
 
@@ -66,7 +78,7 @@ export default function AboutScreen() {
 
       {/* Footer */}
       <View style={styles.footer}>
-        <Text style={styles.footerText}>© 2026 KSCHOOLMATE. All rights reserved.</Text>
+        <Text style={[styles.footerText, { color: colors.textMuted }]}>© 2026 KSCHOOLMATE. All rights reserved.</Text>
       </View>
     </SafeAreaView>
   );
@@ -75,23 +87,20 @@ export default function AboutScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
   },
   header: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: 20,
+    paddingTop: 12,
   },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 8,
-    marginLeft: -8,
+    paddingVertical: 8,
     alignSelf: 'flex-start',
   },
   backText: {
-    color: '#1A1A1A',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     marginLeft: 8,
   },
   container: {
@@ -102,7 +111,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '900',
-    color: '#1A1A1A',
     marginBottom: 40,
   },
   logoSection: {
@@ -113,7 +121,6 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 24,
-    backgroundColor: '#127A71',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
@@ -121,25 +128,21 @@ const styles = StyleSheet.create({
   brandTitle: {
     fontSize: 24,
     fontWeight: '900',
-    color: '#1A1A1A',
     marginBottom: 4,
   },
   brandSubtitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#127A71',
     marginBottom: 24,
   },
   description: {
     fontSize: 15,
-    color: '#6B7280',
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 24,
     paddingHorizontal: 16,
   },
   versionPill: {
-    backgroundColor: '#E5E7EB',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 16,
@@ -147,7 +150,6 @@ const styles = StyleSheet.create({
   versionText: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#4B5563',
   },
   linksContainer: {
     marginBottom: 32,
@@ -161,7 +163,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 16,
-    backgroundColor: '#E5E7EB', // Light grey box
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -170,12 +171,10 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: '800',
-    color: '#1A1A1A',
   },
   separator: {
-    height: 1,
-    backgroundColor: '#F3F4F6',
-    marginLeft: 64, // Align with text
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 64,
     marginVertical: 4,
   },
   footer: {
@@ -183,7 +182,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerText: {
-    fontSize: 12,
-    color: '#6B7280',
+    fontSize: 13,
   },
 });
