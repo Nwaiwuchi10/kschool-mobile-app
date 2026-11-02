@@ -31,13 +31,13 @@ export default function PaymentSuccessScreen() {
   const reference = params.reference || `KSM-${Math.floor(10000000 + Math.random() * 90000000)}`;
 
   React.useEffect(() => {
-    refreshClassStatus().catch(() => {});
+    refreshClassStatus().catch(() => { });
     storageService
       .getLastLearningContext()
       .then((ctx) => {
         if (ctx) setSavedContext(ctx);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const handleContinueLearning = async () => {
@@ -141,7 +141,7 @@ export default function PaymentSuccessScreen() {
             </View>
           </View>
 
-          <View style={[styles.detailRow, styles.refDetailRow]}>
+          {/* <View style={[styles.detailRow, styles.refDetailRow]}>
             <Text style={styles.detailLabel}>Paystack Reference</Text>
             <View style={styles.refContainer}>
               <Text
@@ -153,7 +153,7 @@ export default function PaymentSuccessScreen() {
                 {reference}
               </Text>
             </View>
-          </View>
+          </View> */}
         </View>
       </ScrollView>
 

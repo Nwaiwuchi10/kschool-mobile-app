@@ -22,3 +22,4 @@ export function cleanBreadcrumb(raw?: string): string {
     .map((part) => cleanCurriculumName(part))
     .join(' > ');
 }
+
