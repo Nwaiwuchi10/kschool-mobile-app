@@ -434,7 +434,7 @@ export default function LessonScreen() {
           <Text style={[styles.title, { color: colors.text }]}>{lessonTitle}</Text>
 
           {/* AI Narrator (TTS) Static Info Bar */}
-          <View style={[styles.aiReadAloudCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.aiReadAloudCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 14 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}>
               <View style={[styles.aiMicCircle, { backgroundColor: '#E6F7F5' }]}>
                 {isSynthesizing ? (
@@ -468,6 +468,105 @@ export default function LessonScreen() {
               <Ionicons name="chevron-down" size={14} color={colors.primary} />
             </TouchableOpacity>
             */}
+          </View>
+
+          {/* 1. AI Narrator TTS Audio Media Card (Immediately after AI Narrator TTS header) */}
+          <View style={[styles.teacherPlayerCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 18 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="volume-high" size={18} color={colors.primary} />
+                <Text style={[styles.teacherPlayerTitle, { color: colors.text, marginBottom: 0 }]}>
+                  AI Narrator Audio
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.voiceSwitchBtn, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
+                onPress={() => setShowVoiceModal(true)}
+                activeOpacity={0.75}
+              >
+                <Text style={{ fontSize: 13 }}>{selectedVoice.flag}</Text>
+                <Text style={[styles.voiceSwitchBtnText, { color: colors.primary }]}>{selectedVoice.name}</Text>
+                <Ionicons name="chevron-down" size={14} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* TTS Player Main Controls Row */}
+            <View style={styles.teacherControlsRow}>
+              {/* Speed Toggle */}
+              <TouchableOpacity
+                style={styles.teacherSideIconBtn}
+                onPress={toggleTtsSpeed}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="speedometer-outline" size={22} color={colors.primary} />
+                <Text style={{ fontSize: 9, fontWeight: '700', color: colors.primary, marginTop: 1 }}>
+                  {ttsSpeed}x
+                </Text>
+              </TouchableOpacity>
+
+              {/* TTS Main Play / Pause Circle */}
+              <TouchableOpacity
+                style={[styles.teacherPlayBtn, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
+                onPress={() => handleTtsPlayPause()}
+                disabled={isTtsBuffering || isSynthesizing}
+                activeOpacity={0.85}
+              >
+                {isTtsBuffering || isSynthesizing ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons
+                    name={isTtsPlaying ? 'pause' : 'play'}
+                    size={26}
+                    color="#FFFFFF"
+                    style={{ marginLeft: isTtsPlaying ? 0 : 2 }}
+                  />
+                )}
+              </TouchableOpacity>
+
+              {/* Skip 15s forward */}
+              <TouchableOpacity
+                style={styles.teacherSideIconBtn}
+                onPress={() => handleTtsSkip(15)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="play-forward" size={22} color={colors.primary} />
+                <Text style={{ fontSize: 9, fontWeight: '700', color: colors.primary, marginTop: 1 }}>
+                  +15s
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* TTS Audio Scrubber Bar */}
+            <TouchableOpacity
+              style={styles.teacherScrubberTrack}
+              activeOpacity={0.8}
+              onPress={(e) => {
+                const { locationX } = e.nativeEvent;
+                if (ttsDurationSec > 0 && ttsPlayer) {
+                  const ratio = Math.max(0, Math.min(1, locationX / 280));
+                  handleTtsSkip((ratio * ttsDurationSec) - ttsCurrentSec);
+                }
+              }}
+            >
+              <View style={[styles.teacherScrubberBg, { backgroundColor: colors.surfaceAlt }]}>
+                <View
+                  style={[
+                    styles.teacherScrubberFill,
+                    { width: `${Math.min(100, Math.max(0, ttsProgressPercent))}%`, backgroundColor: colors.primary },
+                  ]}
+                />
+              </View>
+            </TouchableOpacity>
+
+            {/* Audio Timers Row */}
+            <View style={styles.teacherTimeRow}>
+              <Text style={[styles.teacherTimeText, { color: colors.textSecondary }]}>
+                {formatTime(ttsCurrentSec)}
+              </Text>
+              <Text style={[styles.teacherTimeText, { color: colors.textSecondary }]}>
+                {ttsDurationSec > 0 ? formatTime(ttsDurationSec) : (lesson?.duration || '10:00')}
+              </Text>
+            </View>
           </View>
 
           {/* Lesson Progress Counter & Bar (e.g. "Lesson 1 of 3   33% Complete") */}
@@ -546,105 +645,6 @@ export default function LessonScreen() {
             />
           </View>
         ) : !isLoadingLesson ? null : null}
-
-        {/* 1. AI Narrator TTS Audio Media Card */}
-        <View style={[styles.teacherPlayerCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 16 }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Ionicons name="volume-high" size={18} color={colors.primary} />
-              <Text style={[styles.teacherPlayerTitle, { color: colors.text, marginBottom: 0 }]}>
-                AI Narrator Audio
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={[styles.voiceSwitchBtn, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
-              onPress={() => setShowVoiceModal(true)}
-              activeOpacity={0.75}
-            >
-              <Text style={{ fontSize: 13 }}>{selectedVoice.flag}</Text>
-              <Text style={[styles.voiceSwitchBtnText, { color: colors.primary }]}>{selectedVoice.name}</Text>
-              <Ionicons name="chevron-down" size={14} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
-
-          {/* TTS Player Main Controls Row */}
-          <View style={styles.teacherControlsRow}>
-            {/* Speed Toggle */}
-            <TouchableOpacity
-              style={styles.teacherSideIconBtn}
-              onPress={toggleTtsSpeed}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="speedometer-outline" size={22} color={colors.primary} />
-              <Text style={{ fontSize: 9, fontWeight: '700', color: colors.primary, marginTop: 1 }}>
-                {ttsSpeed}x
-              </Text>
-            </TouchableOpacity>
-
-            {/* TTS Main Play / Pause Circle */}
-            <TouchableOpacity
-              style={[styles.teacherPlayBtn, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
-              onPress={() => handleTtsPlayPause()}
-              disabled={isTtsBuffering || isSynthesizing}
-              activeOpacity={0.85}
-            >
-              {isTtsBuffering || isSynthesizing ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Ionicons
-                  name={isTtsPlaying ? 'pause' : 'play'}
-                  size={26}
-                  color="#FFFFFF"
-                  style={{ marginLeft: isTtsPlaying ? 0 : 2 }}
-                />
-              )}
-            </TouchableOpacity>
-
-            {/* Skip 15s forward */}
-            <TouchableOpacity
-              style={styles.teacherSideIconBtn}
-              onPress={() => handleTtsSkip(15)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="play-forward" size={22} color={colors.primary} />
-              <Text style={{ fontSize: 9, fontWeight: '700', color: colors.primary, marginTop: 1 }}>
-                +15s
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* TTS Audio Scrubber Bar */}
-          <TouchableOpacity
-            style={styles.teacherScrubberTrack}
-            activeOpacity={0.8}
-            onPress={(e) => {
-              const { locationX } = e.nativeEvent;
-              if (ttsDurationSec > 0 && ttsPlayer) {
-                const ratio = Math.max(0, Math.min(1, locationX / 280));
-                handleTtsSkip((ratio * ttsDurationSec) - ttsCurrentSec);
-              }
-            }}
-          >
-            <View style={[styles.teacherScrubberBg, { backgroundColor: colors.surfaceAlt }]}>
-              <View
-                style={[
-                  styles.teacherScrubberFill,
-                  { width: `${Math.min(100, Math.max(0, ttsProgressPercent))}%`, backgroundColor: colors.primary },
-                ]}
-              />
-            </View>
-          </TouchableOpacity>
-
-          {/* Audio Timers Row */}
-          <View style={styles.teacherTimeRow}>
-            <Text style={[styles.teacherTimeText, { color: colors.textSecondary }]}>
-              {formatTime(ttsCurrentSec)}
-            </Text>
-            <Text style={[styles.teacherTimeText, { color: colors.textSecondary }]}>
-              {ttsDurationSec > 0 ? formatTime(ttsDurationSec) : (lesson?.duration || '10:00')}
-            </Text>
-          </View>
-        </View>
 
         {/* 2. Teacher's Explanation Audio Media Player (Only display if teacher explanation audio is uploaded) */}
         {Boolean(teacherAudioUrl && teacherAudioUrl.trim().length > 0) && (
