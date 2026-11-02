@@ -26,6 +26,7 @@ interface LessonHelpCallout {
   description: string;
   actionText?: string;
   actionRoute?: string;
+  mintStyle?: boolean;
 }
 
 interface LessonHelpTopic {
@@ -156,38 +157,38 @@ const LEARNING_HELP_TOPICS: LessonHelpTopic[] = [
     id: 'completing-exercises-quizzes',
     title: 'Completing Exercises and Quizzes',
     icon: 'clipboard-outline',
-    subtitle:
-      'Test your understanding of each topic with practice exercises and quizzes.',
+    subtitle: 'Practise what you have learned, then review your answers.',
     steps: [
       {
         step: 1,
-        title: 'Complete topic lessons',
+        title: 'Finish the required lessons',
         description:
-          'Read or listen through all the required lessons inside your topic.',
+          'Complete the required lessons in the current topic first.',
       },
       {
         step: 2,
-        title: 'Start the exercise or quiz',
+        title: 'Open the exercise/quiz',
         description:
-          'Tap the Exercise or Quiz button at the bottom of the topic lesson list.',
+          'In the same topic, choose its exercise or quiz.',
       },
       {
         step: 3,
-        title: 'Answer the questions',
+        title: 'Answer and submit',
         description:
-          'Select your answers and submit each question before time runs out.',
+          'Read each question, answer it, then submit your answers.',
       },
       {
         step: 4,
-        title: 'Review your score',
+        title: 'View your Result',
         description:
-          'Meet or exceed the cut-off mark to earn your score and unlock the next topic.',
+          'Open Result, then choose Review Answers to go over your work.',
       },
     ],
     callout: {
-      title: 'Did not reach the pass mark?',
+      title: 'What unlocks the next topic?',
       description:
-        'You can retake the quiz after reviewing the lesson notes to achieve the passing score.',
+        'The next topic unlocks when both the required lessons and the topic exercise are complete.',
+      mintStyle: true,
     },
   },
   {
@@ -195,38 +196,38 @@ const LEARNING_HELP_TOPICS: LessonHelpTopic[] = [
     title: 'Unlocking the Next Topic',
     icon: 'lock-open-outline',
     subtitle:
-      'Learn how the sequential topic progression works on KSCHOOLMATE.',
+      'Learn one topic at a time. Finish both parts below to move on.',
     steps: [
       {
         step: 1,
-        title: 'Follow the learning order',
+        title: 'Complete the required lessons',
         description:
-          'Topics are arranged sequentially to ensure strong mastery of foundational concepts.',
+          'Finish every required lesson in your current topic.',
       },
       {
         step: 2,
-        title: 'Pass the topic quiz',
+        title: 'Complete the exercise/quiz',
         description:
-          'Score at least the minimum cut-off mark in the previous topic’s quiz.',
+          'Answer and submit the topic’s exercise or quiz. Lessons alone do not unlock the next topic.',
       },
       {
         step: 3,
-        title: 'Active subscription check',
+        title: 'View the result',
         description:
-          'Subsequent topics require an active class subscription to unlock fully.',
+          'Check your Result, then return to your subject’s topic list.',
       },
       {
         step: 4,
-        title: 'Explore the next topic',
+        title: 'Open the next unlocked topic',
         description:
-          'Once unlocked, you can start the lessons and exercises of the next topic immediately.',
+          'Choose the next topic to continue. Completed topics stay available for revision.',
       },
     ],
     callout: {
-      title: 'Subscription required?',
+      title: 'Both parts must be complete',
       description:
-        'If your subscription has expired or is inactive, visit Subscription & Payments to renew.',
-      actionRoute: '/subscription',
+        'Required lessons + topic exercise = next topic unlocked. If it is still locked, check that both are complete.',
+      mintStyle: true,
     },
   },
   {
@@ -234,33 +235,38 @@ const LEARNING_HELP_TOPICS: LessonHelpTopic[] = [
     title: 'Tracking My Progress',
     icon: 'stats-chart-outline',
     subtitle:
-      'Keep an eye on completed topics, scores, and overall learning milestones.',
+      'See what you have completed and where to continue learning.',
     steps: [
       {
         step: 1,
-        title: 'Check your Dashboard',
+        title: 'Open Progress',
         description:
-          'Your Home Dashboard provides a high-level overview of overall course progress.',
+          'Go to Progress in the app’s navigation.',
       },
       {
         step: 2,
-        title: 'View Subject breakdown',
+        title: 'Check your learning progress',
         description:
-          'Open any subject to see which topics are completed, in progress, or locked.',
+          'Look at your completed topics and your learning progress.',
       },
       {
         step: 3,
-        title: 'Check Quiz results',
+        title: 'Look at a subject',
         description:
-          'Your quiz scores and completion badges are displayed upon completing quizzes.',
+          'Open a subject to see the progress of its topics.',
       },
       {
         step: 4,
-        title: 'Keep learning consistently',
+        title: 'Continue or revise',
         description:
-          'Consistent daily study will steadily fill your progress meters.',
+          'Continue an unfinished topic, or revisit a completed topic for revision.',
       },
     ],
+    callout: {
+      title: 'Keep moving at your own pace',
+      description:
+        'Complete the required lessons and the topic exercise to unlock the next topic. Your completed topics stay available.',
+    },
   },
   {
     id: 'offline-downloads',
@@ -511,9 +517,15 @@ export default function LearningHelpScreen() {
               <TouchableOpacity
                 style={[
                   styles.calloutCard,
-                  {
-                    backgroundColor: isDark ? colors.surfaceAlt : '#F3F4F6',
-                  },
+                  selectedTopic.callout.mintStyle
+                    ? {
+                        backgroundColor: isDark ? '#143834' : '#CCFBEF',
+                        borderWidth: 1,
+                        borderColor: isDark ? '#1D5A53' : '#A7F3D0',
+                      }
+                    : {
+                        backgroundColor: isDark ? colors.surfaceAlt : '#F3F4F6',
+                      },
                 ]}
                 activeOpacity={selectedTopic.callout.actionRoute ? 0.7 : 1}
                 onPress={() => {
@@ -522,13 +534,30 @@ export default function LearningHelpScreen() {
                   }
                 }}
               >
-                <Text style={[styles.calloutTitle, { color: colors.text }]}>
+                <Text
+                  style={[
+                    styles.calloutTitle,
+                    {
+                      color: selectedTopic.callout.mintStyle
+                        ? isDark
+                          ? '#2DD4BF'
+                          : '#0F766E'
+                        : colors.text,
+                    },
+                  ]}
+                >
                   {selectedTopic.callout.title}
                 </Text>
                 <Text
                   style={[
                     styles.calloutDescription,
-                    { color: colors.textSecondary },
+                    {
+                      color: selectedTopic.callout.mintStyle
+                        ? isDark
+                          ? '#D1FAE5'
+                          : '#0F766E'
+                        : colors.textSecondary,
+                    },
                   ]}
                 >
                   {selectedTopic.callout.description}
@@ -808,3 +837,4 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 });
+
