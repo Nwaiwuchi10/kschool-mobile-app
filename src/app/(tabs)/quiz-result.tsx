@@ -1,10 +1,11 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import PrimaryButton from '@/components/ui/PrimaryButton';
+import ResponseMessageModal from '@/components/ui/ResponseMessageModal';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useClass } from '@/store/ClassContext';
 import { subscriptionService } from '@/services/subscription.service';
@@ -27,6 +28,7 @@ export default function QuizResultScreen() {
   }>();
 
   const [hasSubscription, setHasSubscription] = useState<boolean>(false);
+  const [showUnlockModal, setShowUnlockModal] = useState<boolean>(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -158,26 +160,7 @@ export default function QuizResultScreen() {
                         },
                       });
                     } else {
-                      Alert.alert(
-                        'Unlock Remaining Lessons',
-                        'Congratulations on passing the free preview quiz! To unlock the next lesson and all full curriculum materials for your class, please subscribe to an active plan.',
-                        [
-                          { text: 'Later', style: 'cancel' },
-                          {
-                            text: 'Subscribe Now',
-                            onPress: () => {
-                              router.push({
-                                pathname: '/premium-access',
-                                params: {
-                                  topicId: params.topicId,
-                                  subjectName: params.subjectName ? params.subjectName.split(' > ')[0] : undefined,
-                                  topicTitle: params.subjectName ? params.subjectName.split(' > ')[1] : undefined,
-                                },
-                              });
-                            },
-                          },
-                        ]
-                      );
+                      setShowUnlockModal(true);
                     }
                   } else if (params.topicId) {
                     router.replace({
@@ -325,6 +308,31 @@ export default function QuizResultScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Styled Unlock Remaining Lessons Modal */}
+      <ResponseMessageModal
+        visible={showUnlockModal}
+        type="success"
+        title="🎉 Congratulations on Passing!"
+        message={`You scored ${percent}% on the free preview quiz! To unlock the next lesson and gain complete access to all audio-visual lessons, quizzes, and subjects for ${selectedClass || 'your class'}, activate your subscription plan now.`}
+        primaryButtonText="Subscribe Now"
+        secondaryButtonText="Maybe Later"
+        timeoutMs={0}
+        showProgressBar={false}
+        onPrimaryPress={() => {
+          setShowUnlockModal(false);
+          router.push({
+            pathname: '/premium-access',
+            params: {
+              topicId: params.topicId,
+              subjectName: params.subjectName ? params.subjectName.split(' > ')[0] : undefined,
+              topicTitle: params.subjectName ? params.subjectName.split(' > ')[1] : undefined,
+            },
+          });
+        }}
+        onSecondaryPress={() => setShowUnlockModal(false)}
+        onClose={() => setShowUnlockModal(false)}
+      />
     </SafeAreaView>
   );
 }
