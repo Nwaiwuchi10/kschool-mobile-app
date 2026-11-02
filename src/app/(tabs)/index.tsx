@@ -512,7 +512,7 @@ export default function HomeScreen() {
               ]}
               onPress={() => {
                 setShowClassDropdown(false);
-                router.push('/select-class');
+                router.push('/switch-class');
               }}
             >
               <Ionicons name="add-circle-outline" size={18} color={colors.primary} />

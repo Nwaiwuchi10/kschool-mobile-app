@@ -77,7 +77,7 @@ export default function ProfileScreen() {
 
         <TouchableOpacity
           style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          onPress={() => router.push('/select-class')}
+          onPress={() => router.push('/switch-class')}
           activeOpacity={0.75}
         >
           <View style={[styles.iconBox, { backgroundColor: colors.primaryMint }]}>
