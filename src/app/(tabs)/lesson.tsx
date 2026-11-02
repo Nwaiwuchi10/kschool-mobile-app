@@ -21,6 +21,7 @@ import { storageService } from '@/services/storage.service';
 import { MathView } from '@/components/MathView';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useClass } from '@/store/ClassContext';
+import { cleanCurriculumName, cleanBreadcrumb } from '@/utils/formatCurriculum';
 
 export default function LessonScreen() {
   const { colors, isDark } = useAppTheme();
@@ -57,7 +58,8 @@ export default function LessonScreen() {
   const [topicLessons, setTopicLessons] = useState<MobileLesson[]>([]);
 
   const lessonTitle = lesson?.title || params.title || 'Lesson Details';
-  const subjectName = params.subject || 'Subject Curriculum';
+  const rawSubject = params.subject || 'Subject Curriculum';
+  const subjectName = cleanBreadcrumb(rawSubject);
   const lessonContent = lesson?.content || '';
 
   // Load student's saved preferred voice

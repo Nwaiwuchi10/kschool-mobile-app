@@ -22,6 +22,7 @@ import { authService } from '@/services/auth.service';
 import { storageService } from '@/services/storage.service';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useClass } from '@/store/ClassContext';
+import { cleanCurriculumName } from '@/utils/formatCurriculum';
 
 export interface CurriculumTopicItem {
   id: string; // e.g. "01", "02"
@@ -51,7 +52,7 @@ export default function TopicDetailsScreen() {
   }>();
 
   const effectiveSubjectId = params.subjectId || params.id;
-  const initialSubjectName = params.subjectName || params.name || 'Subject';
+  const initialSubjectName = cleanCurriculumName(params.subjectName || params.name || 'Subject');
 
   // Subject topics list (from subject-details)
   const [topicsList, setTopicsList] = useState<CurriculumTopicItem[]>([]);
@@ -184,7 +185,7 @@ export default function TopicDetailsScreen() {
 
         if (subjectData.status === 'fulfilled' && subjectData.value) {
           const sDoc = subjectData.value;
-          if (sDoc.name) setSubjectTitle(sDoc.name);
+          if (sDoc.name) setSubjectTitle(cleanCurriculumName(sDoc.name));
 
           const rawTopics = Array.isArray(sDoc.topics) ? sDoc.topics : [];
           let previousTopicCompleted = true;
