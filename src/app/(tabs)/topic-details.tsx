@@ -421,30 +421,54 @@ export default function TopicDetailsScreen() {
     }
 
     if (lesson.isLocked || lesson.requiresSubscription) {
-      router.push({
-        pathname: '/premium-access',
-        params: {
-          topicId: selectedTopicId,
-          topicTitle: selectedTopicTitle,
-          subjectName: subjectTitle,
-          subjectId: effectiveSubjectId,
-        },
-      });
+      Alert.alert(
+        'Subscription Required',
+        `Lesson 1 is free for all newly enrolled students. To unlock "${lesson.title}" and the remaining lessons for ${selectedClass || 'your class'}, please subscribe to activate full curriculum access.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Subscribe Now',
+            onPress: () => {
+              router.push({
+                pathname: '/premium-access',
+                params: {
+                  topicId: selectedTopicId,
+                  topicTitle: selectedTopicTitle,
+                  subjectName: subjectTitle,
+                  subjectId: effectiveSubjectId,
+                },
+              });
+            },
+          },
+        ]
+      );
       return;
     }
 
     try {
       const access = await subscriptionService.checkAccess(selectedTopicId, lesson._id, selectedClass);
       if (!access.canAccess) {
-        router.push({
-          pathname: '/premium-access',
-          params: {
-            topicId: selectedTopicId,
-            topicTitle: selectedTopicTitle,
-            subjectName: subjectTitle,
-            subjectId: effectiveSubjectId,
-          },
-        });
+        Alert.alert(
+          'Subscription Required',
+          `An active subscription for ${selectedClass || 'your class'} is required to access this lesson.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Subscribe Now',
+              onPress: () => {
+                router.push({
+                  pathname: '/premium-access',
+                  params: {
+                    topicId: selectedTopicId,
+                    topicTitle: selectedTopicTitle,
+                    subjectName: subjectTitle,
+                    subjectId: effectiveSubjectId,
+                  },
+                });
+              },
+            },
+          ]
+        );
         return;
       }
     } catch {

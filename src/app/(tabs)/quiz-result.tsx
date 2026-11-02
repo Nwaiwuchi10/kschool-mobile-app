@@ -1,6 +1,6 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -158,14 +158,26 @@ export default function QuizResultScreen() {
                         },
                       });
                     } else {
-                      router.push({
-                        pathname: '/premium-access',
-                        params: {
-                          topicId: params.topicId,
-                          subjectName: params.subjectName ? params.subjectName.split(' > ')[0] : undefined,
-                          topicTitle: params.subjectName ? params.subjectName.split(' > ')[1] : undefined,
-                        },
-                      });
+                      Alert.alert(
+                        'Unlock Remaining Lessons',
+                        'Congratulations on passing the free preview quiz! To unlock the next lesson and all full curriculum materials for your class, please subscribe to an active plan.',
+                        [
+                          { text: 'Later', style: 'cancel' },
+                          {
+                            text: 'Subscribe Now',
+                            onPress: () => {
+                              router.push({
+                                pathname: '/premium-access',
+                                params: {
+                                  topicId: params.topicId,
+                                  subjectName: params.subjectName ? params.subjectName.split(' > ')[0] : undefined,
+                                  topicTitle: params.subjectName ? params.subjectName.split(' > ')[1] : undefined,
+                                },
+                              });
+                            },
+                          },
+                        ]
+                      );
                     }
                   } else if (params.topicId) {
                     router.replace({
