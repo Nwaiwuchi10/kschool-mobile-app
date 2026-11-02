@@ -49,7 +49,11 @@ export default function AboutScreen() {
 
           <View style={styles.separator} />
 
-          <TouchableOpacity style={styles.linkRow}>
+          <TouchableOpacity
+            style={styles.linkRow}
+            activeOpacity={0.7}
+            onPress={() => router.push('/privacy-policy')}
+          >
             <View style={styles.iconBox}>
               <Ionicons name="shield-checkmark-outline" size={20} color="#1A1A1A" />
             </View>
