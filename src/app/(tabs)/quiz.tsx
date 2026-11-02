@@ -530,9 +530,9 @@ export default function QuizScreen() {
                   const letter = String.fromCharCode(65 + optIndex);
                   const isSelected = selectedOptIndex === optIndex;
                   const optionTextColor = isSelected
-                    ? colors.primary
+                    ? (isDark ? '#FFFFFF' : colors.primary)
                     : isDark
-                    ? '#F9FAFB' // High-contrast crisp white in dark mode
+                    ? '#FFFFFF' // Crisp pure white for all answer options in dark mode
                     : colors.text;
 
                   return (
@@ -542,14 +542,16 @@ export default function QuizScreen() {
                         styles.optionCard,
                         {
                           backgroundColor: isSelected
-                            ? colors.cardHighlightBg
+                            ? isDark
+                              ? colors.primaryDark || '#0D5C55'
+                              : colors.cardHighlightBg
                             : isDark
                             ? colors.surfaceAlt
                             : colors.surface,
                           borderColor: isSelected
                             ? colors.primary
                             : isDark
-                            ? '#374151'
+                            ? '#4B5563'
                             : colors.border,
                         },
                       ]}
@@ -565,8 +567,8 @@ export default function QuizScreen() {
                               : isDark
                               ? '#3A3F47'
                               : colors.surfaceAlt,
-                            borderColor: isDark && !isSelected ? '#4B5563' : undefined,
-                            borderWidth: isDark && !isSelected ? 1 : 0,
+                            borderColor: isDark && !isSelected ? '#6B7280' : undefined,
+                            borderWidth: isDark && !isSelected ? 1.5 : 0,
                           },
                         ]}
                       >
@@ -574,13 +576,10 @@ export default function QuizScreen() {
                           style={[
                             styles.optionLetterText,
                             {
-                              color: isSelected
-                                ? '#FFFFFF'
-                                : isDark
-                                ? '#FFFFFF' // Brightest pure white for A, B, C etc. in dark mode
-                                : colors.textSecondary,
-                              fontWeight: '800',
+                              color: '#FFFFFF', // Pure white for option letters A, B, C etc. in dark mode & when selected
+                              fontWeight: '900',
                             },
+                            !isDark && !isSelected && { color: colors.textSecondary },
                           ]}
                         >
                           {letter}
@@ -591,20 +590,17 @@ export default function QuizScreen() {
                           content={opt}
                           fontSize={15}
                           color={optionTextColor}
-                          textStyle={[
-                            styles.optionText,
-                            {
-                              color: optionTextColor,
-                              fontWeight: isSelected ? '700' : '600',
-                            },
-                          ]}
+                          textStyle={{
+                            color: optionTextColor,
+                            fontWeight: isSelected ? '700' : '600',
+                          }}
                           inline
                         />
                       </View>
 
                       {isSelected && (
                         <View style={styles.checkIcon}>
-                          <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
+                          <Ionicons name="checkmark-circle" size={24} color={isDark ? '#FFFFFF' : colors.primary} />
                         </View>
                       )}
                     </TouchableOpacity>
