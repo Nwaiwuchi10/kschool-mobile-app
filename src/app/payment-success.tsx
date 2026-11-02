@@ -1,6 +1,6 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -134,8 +134,25 @@ export default function PaymentSuccessScreen() {
           </View>
 
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Reference</Text>
-            <Text style={styles.detailValue}>{reference}</Text>
+            <Text style={styles.detailLabel}>Payment Method</Text>
+            <View style={styles.badgeRow}>
+              <Ionicons name="card-outline" size={14} color="#0D9488" style={{ marginRight: 4 }} />
+              <Text style={styles.badgeText}>Paystack</Text>
+            </View>
+          </View>
+
+          <View style={[styles.detailRow, styles.refDetailRow]}>
+            <Text style={styles.detailLabel}>Paystack Reference</Text>
+            <View style={styles.refContainer}>
+              <Text
+                style={styles.refValue}
+                selectable={true}
+                numberOfLines={2}
+                ellipsizeMode="middle"
+              >
+                {reference}
+              </Text>
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -248,17 +265,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
+    gap: 12,
+  },
+  refDetailRow: {
+    alignItems: 'flex-start',
+    marginTop: 2,
+    marginBottom: 6,
   },
   detailLabel: {
     fontSize: 14,
     color: '#6B7280',
     fontWeight: '500',
+    flexShrink: 0,
   },
   detailValue: {
     fontSize: 15,
     fontWeight: '800',
     color: '#1A1A1A',
+    textAlign: 'right',
+    flexShrink: 1,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDFA',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#CCFBF1',
+  },
+  badgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0D9488',
+  },
+  refContainer: {
+    flex: 1,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    maxWidth: '65%',
+  },
+  refValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'right',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    overflow: 'hidden',
   },
   footer: {
     paddingHorizontal: 24,
