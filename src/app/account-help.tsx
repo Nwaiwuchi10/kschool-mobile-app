@@ -386,11 +386,16 @@ export default function AccountHelpScreen() {
 
             {/* Optional security warning note */}
             {selectedTopic.warningNote && (
-              <View style={styles.warningNoteContainer}>
+              <View
+                style={[
+                  styles.warningNoteContainer,
+                  { borderTopColor: isDark ? colors.border : '#E5E7EB' },
+                ]}
+              >
                 <Text
                   style={[
                     styles.warningNoteText,
-                    { color: isDark ? '#D1D5DB' : '#4B5563' },
+                    { color: isDark ? '#D1D5DB' : '#1A1A1A' },
                   ]}
                 >
                   {selectedTopic.warningNote}
@@ -568,13 +573,15 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   warningNoteContainer: {
+    marginTop: 8,
     marginBottom: 24,
-    paddingVertical: 8,
+    paddingTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   warningNoteText: {
     fontSize: 13,
-    lineHeight: 18,
-    fontStyle: 'italic',
+    lineHeight: 19,
+    fontWeight: '500',
   },
   bottomSection: {
     marginTop: 12,
@@ -620,3 +627,4 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 });
+
