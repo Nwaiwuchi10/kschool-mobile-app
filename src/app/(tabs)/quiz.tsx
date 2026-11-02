@@ -529,14 +529,28 @@ export default function QuizScreen() {
                 {currentQ.options.map((opt, optIndex) => {
                   const letter = String.fromCharCode(65 + optIndex);
                   const isSelected = selectedOptIndex === optIndex;
+                  const optionTextColor = isSelected
+                    ? colors.primary
+                    : isDark
+                    ? '#F9FAFB' // High-contrast crisp white in dark mode
+                    : colors.text;
+
                   return (
                     <TouchableOpacity
                       key={optIndex}
                       style={[
                         styles.optionCard,
                         {
-                          backgroundColor: isSelected ? colors.cardHighlightBg : colors.surface,
-                          borderColor: isSelected ? colors.primary : colors.border,
+                          backgroundColor: isSelected
+                            ? colors.cardHighlightBg
+                            : isDark
+                            ? colors.surfaceAlt
+                            : colors.surface,
+                          borderColor: isSelected
+                            ? colors.primary
+                            : isDark
+                            ? '#374151'
+                            : colors.border,
                         },
                       ]}
                       onPress={() => handleSelectOption(optIndex)}
@@ -545,13 +559,25 @@ export default function QuizScreen() {
                       <View
                         style={[
                           styles.optionLetterBox,
-                          { backgroundColor: isSelected ? colors.primary : colors.surfaceAlt },
+                          {
+                            backgroundColor: isSelected
+                              ? colors.primary
+                              : isDark
+                              ? '#32363C'
+                              : colors.surfaceAlt,
+                          },
                         ]}
                       >
                         <Text
                           style={[
                             styles.optionLetterText,
-                            { color: isSelected ? '#FFFFFF' : colors.textSecondary },
+                            {
+                              color: isSelected
+                                ? '#FFFFFF'
+                                : isDark
+                                ? '#E5E7EB'
+                                : colors.textSecondary,
+                            },
                           ]}
                         >
                           {letter}
@@ -561,8 +587,14 @@ export default function QuizScreen() {
                         <MathView
                           content={opt}
                           fontSize={15}
-                          color={isSelected ? colors.primary : colors.text}
-                          textStyle={[styles.optionText, isSelected && { color: colors.primary, fontWeight: '700' }]}
+                          color={optionTextColor}
+                          textStyle={[
+                            styles.optionText,
+                            {
+                              color: optionTextColor,
+                              fontWeight: isSelected ? '700' : '600',
+                            },
+                          ]}
                           inline
                         />
                       </View>
