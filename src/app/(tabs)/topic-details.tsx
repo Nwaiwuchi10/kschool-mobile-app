@@ -80,15 +80,18 @@ export default function TopicDetailsScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasSubscription, setHasSubscription] = useState<boolean>(false);
 
-  // Modal alert for locked topics
+  // Modal alert for locked topics & lesson quiz gates
   const [lockModal, setLockModal] = useState<{
     visible: boolean;
     title: string;
     message: string;
     type: 'warning' | 'info';
     primaryText?: string;
+    secondaryText?: string;
     targetTopicId?: string;
-    action?: 'subscribe' | 'take_quiz';
+    targetLessonId?: string;
+    targetLessonTitle?: string;
+    action?: 'subscribe' | 'take_quiz' | 'take_lesson_quiz';
   }>({
     visible: false,
     title: '',
@@ -413,62 +416,46 @@ export default function TopicDetailsScreen() {
 
   const handleLessonPress = async (lesson: any, index: number) => {
     if (lesson.requiresPriorQuiz) {
-      Alert.alert(
-        'Pass Previous Lesson Quiz First',
-        'You must score at least 70% cutoff mark on the previous lesson\'s quiz to unlock this lesson.'
-      );
+      const prevLesson = index > 0 ? lessons[index - 1] : null;
+      setLockModal({
+        visible: true,
+        type: 'warning',
+        title: 'Pass Previous Lesson Quiz First',
+        message: `You must score at least 70% cutoff mark on the quiz for "${prevLesson?.title || 'the previous lesson'}" before unlocking this lesson.`,
+        primaryText: prevLesson ? 'Take Previous Lesson Quiz' : 'Got It',
+        secondaryText: 'Dismiss',
+        action: prevLesson ? 'take_lesson_quiz' : undefined,
+        targetLessonId: prevLesson?._id,
+        targetLessonTitle: prevLesson?.title,
+      });
       return;
     }
 
     if (lesson.isLocked || lesson.requiresSubscription) {
-      Alert.alert(
-        'Subscription Required',
-        `Lesson 1 is free for all newly enrolled students. To unlock "${lesson.title}" and the remaining lessons for ${selectedClass || 'your class'}, please subscribe to activate full curriculum access.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Subscribe Now',
-            onPress: () => {
-              router.push({
-                pathname: '/premium-access',
-                params: {
-                  topicId: selectedTopicId,
-                  topicTitle: selectedTopicTitle,
-                  subjectName: subjectTitle,
-                  subjectId: effectiveSubjectId,
-                },
-              });
-            },
-          },
-        ]
-      );
+      setLockModal({
+        visible: true,
+        type: 'warning',
+        title: 'Subscription Required',
+        message: `Lesson 1 is a complimentary trial preview for all newly enrolled students. To unlock "${lesson.title}" and all remaining curriculum materials for ${selectedClass || 'your class'}, please activate your subscription.`,
+        primaryText: 'Subscribe Now',
+        secondaryText: 'Maybe Later',
+        action: 'subscribe',
+      });
       return;
     }
 
     try {
       const access = await subscriptionService.checkAccess(selectedTopicId, lesson._id, selectedClass);
       if (!access.canAccess) {
-        Alert.alert(
-          'Subscription Required',
-          `An active subscription for ${selectedClass || 'your class'} is required to access this lesson.`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Subscribe Now',
-              onPress: () => {
-                router.push({
-                  pathname: '/premium-access',
-                  params: {
-                    topicId: selectedTopicId,
-                    topicTitle: selectedTopicTitle,
-                    subjectName: subjectTitle,
-                    subjectId: effectiveSubjectId,
-                  },
-                });
-              },
-            },
-          ]
-        );
+        setLockModal({
+          visible: true,
+          type: 'warning',
+          title: 'Subscription Required',
+          message: `An active subscription for ${selectedClass || 'your class'} is required to access "${lesson.title}".`,
+          primaryText: 'Subscribe Now',
+          secondaryText: 'Cancel',
+          action: 'subscribe',
+        });
         return;
       }
     } catch {
@@ -937,15 +924,40 @@ export default function TopicDetailsScreen() {
         title={lockModal.title}
         message={lockModal.message}
         primaryButtonText={lockModal.primaryText || 'OK'}
-        secondaryButtonText="Dismiss"
+        secondaryButtonText={lockModal.secondaryText || 'Dismiss'}
         timeoutMs={0}
         showProgressBar={false}
         onPrimaryPress={() => {
+          const action = lockModal.action;
+          const tTopicId = lockModal.targetTopicId;
+          const tLessonId = lockModal.targetLessonId;
+          const tLessonTitle = lockModal.targetLessonTitle;
           setLockModal((prev) => ({ ...prev, visible: false }));
-          if (lockModal.action === 'take_quiz' && lockModal.targetTopicId) {
-            setSelectedTopicId(lockModal.targetTopicId);
-            const foundTitle = topicsList.find((t) => (t.topicId || t._id) === lockModal.targetTopicId)?.title;
+
+          if (action === 'subscribe') {
+            router.push({
+              pathname: '/premium-access',
+              params: {
+                topicId: selectedTopicId,
+                topicTitle: selectedTopicTitle,
+                subjectName: subjectTitle,
+                subjectId: effectiveSubjectId,
+              },
+            });
+          } else if (action === 'take_quiz' && tTopicId) {
+            setSelectedTopicId(tTopicId);
+            const foundTitle = topicsList.find((t) => (t.topicId || t._id) === tTopicId)?.title;
             if (foundTitle) setSelectedTopicTitle(foundTitle);
+          } else if (action === 'take_lesson_quiz' && tLessonId) {
+            router.push({
+              pathname: '/quiz',
+              params: {
+                topicId: selectedTopicId,
+                lessonId: tLessonId,
+                title: `${tLessonTitle || 'Lesson'} Quiz Assessment`,
+                subjectName: `${subjectTitle} > ${selectedTopicTitle}`,
+              },
+            });
           }
         }}
         onSecondaryPress={() => setLockModal((prev) => ({ ...prev, visible: false }))}
