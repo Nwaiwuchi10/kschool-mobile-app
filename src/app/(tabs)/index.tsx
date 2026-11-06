@@ -1,6 +1,6 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Modal, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
@@ -468,7 +468,11 @@ export default function HomeScreen() {
                     onPress={async () => {
                       setShowClassDropdown(false);
                       if (!isSelected) {
-                        await selectClass(clsName);
+                        try {
+                          await selectClass(clsName);
+                        } catch (err: any) {
+                          Alert.alert('Selection Notice', err?.message || 'Could not switch class. Please check your network connection.');
+                        }
                       }
                     }}
                   >

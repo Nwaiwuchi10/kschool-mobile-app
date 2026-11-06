@@ -58,12 +58,16 @@ api.interceptors.response.use(
       } else if (typeof data.error === 'string') {
         message = data.error;
       }
+    } else if (error.code === 'ECONNABORTED' || (error.message && error.message.toLowerCase().includes('timeout'))) {
+      message = 'Your connection is slow and the request took too long. Please check your network and try again.';
+    } else if (error.message && error.message.toLowerCase().includes('network error')) {
+      message = 'No internet connection. Please check your mobile data or Wi-Fi and try again.';
+    } else if (!error.response && error.message) {
+      message = 'We are having trouble reaching KSCHOOLMATE right now. Please check your internet connection and try again.';
+    } else if (error.response?.status && error.response.status >= 500) {
+      message = 'Something went wrong on our side. Please try again shortly.';
     } else if (error.message) {
-      if (error.message.includes('Network Error')) {
-        message = `Cannot connect to backend server (${error.config?.baseURL || ''}${error.config?.url || ''}). Please verify network connection.`;
-      } else {
-        message = error.message;
-      }
+      message = error.message;
     }
 
     const requestUrl = error.config?.url || '';

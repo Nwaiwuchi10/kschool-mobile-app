@@ -95,7 +95,7 @@ export default function PaymentSummaryScreen() {
       console.error('Payment init error:', err);
       Alert.alert(
         'Payment Connection Notice',
-        err?.response?.data?.message || 'Unable to initialize Paystack checkout right now. Please check your connection and try again.'
+        err?.message || 'Unable to initialize Paystack checkout right now. Please check your connection and try again.'
       );
     } finally {
       setIsInitializing(false);
@@ -138,8 +138,8 @@ export default function PaymentSummaryScreen() {
       console.warn('Backend verify error:', err);
       Alert.alert(
         'Verification Pending',
-        err?.response?.data?.message ||
-          'We could not verify your payment yet. If you completed the payment on Paystack, tap "Verify Again" to confirm.',
+        err?.message ||
+          'We could not verify your payment yet due to a network delay. If money was debited, please do not pay again—tap "Verify Again" to confirm your subscription.',
         [
           { text: 'Cancel', style: 'cancel', onPress: () => { hasVerifiedRef.current = false; } },
           {
